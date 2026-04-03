@@ -297,6 +297,67 @@ createApp({
             }
         };
 
+        // --- XUẤT FILE WORD (.DOC) ---
+        const exportToWord = (exam) => {
+            // 1. Tạo bộ khung HTML chuẩn của Microsoft Word
+            let content = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+            <head><meta charset='utf-8'><title>${exam.title}</title>
+            <style>
+                body { font-family: 'Times New Roman', serif; font-size: 14pt; line-height: 1.5; }
+                .title { text-align: center; font-size: 16pt; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
+                .time { text-align: center; font-size: 12pt; font-style: italic; margin-bottom: 20px; }
+                .question { font-weight: bold; margin-top: 15px; margin-bottom: 5px;}
+                .options { margin-left: 15px; }
+                .option { margin-bottom: 5px; }
+                .key-title { font-weight: bold; text-align: center; font-size: 14pt; margin-top: 30px; margin-bottom: 15px; text-decoration: underline; }
+            </style>
+            </head><body>`;
+
+            // 2. Điền Tiêu đề và Thời gian
+            content += `<div class='title'>ĐỀ THI: ${exam.title}</div>`;
+            content += `<div class='time'>Thời gian làm bài: ${exam.time} phút</div>`;
+
+            // 3. Đổ dữ liệu Câu hỏi
+            if (exam.type === 'quiz') {
+                exam.questions.forEach((q, index) => {
+                    content += `<div class='question'>Câu ${index + 1}: ${q.text}</div>`;
+                    content += `<div class='options'>`;
+                    q.options.forEach((opt, oIndex) => {
+                        const char = String.fromCharCode(65 + oIndex); // Chuyển 0,1,2,3 thành A, B, C, D
+                        content += `<div class='option'>${char}. ${opt}</div>`;
+                    });
+                    content += `</div>`;
+                });
+
+                // Tự động tạo Bảng Đáp Án ở cuối file cho Giáo viên
+                content += `<br><hr><div class='key-title'>BẢNG ĐÁP ÁN</div><div>`;
+                exam.questions.forEach((q, index) => {
+                    const char = String.fromCharCode(65 + q.correct);
+                    content += `<b>Câu ${index + 1}:</b> ${char} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`;
+                    if ((index + 1) % 5 === 0) content += `<br><br>`; // Xuống dòng mỗi 5 câu cho đẹp
+                });
+                content += `</div>`;
+            } else {
+                content += `<div class='question'>Nội dung tự luận:</div>`;
+                content += `<div>${exam.essayContent.replace(/\n/g, '<br>')}</div>`; // Chữ nguyên định dạng xuống dòng
+            }
+
+            content += `</body></html>`;
+
+            // 4. Đóng gói thành file .doc và tự động tải về
+            const blob = new Blob(['\ufeff', content], { type: 'application/msword' }); // \ufeff giúp tránh lỗi font tiếng Việt
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `De_Thi_${exam.title.replace(/\s+/g, '_')}.doc`; 
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            showNotify("Đã tải xuống file Word thành công!");
+        };
+
         // --- GRADING SYSTEM (Chấm bài) ---
         const gradingModal = ref(false);
         const currentGradingResult = ref(null);
@@ -411,7 +472,7 @@ createApp({
             showAddModal, newUserData, cheatWarnings,
             gradingModal, currentGradingResult, manualScore,
             teacherTab, aiPrompt, isGenerating, aiMatrix, aiUploadedImage, 
-            handleAiImageUpload, handleGenerateAI, 
+            handleAiImageUpload, handleGenerateAI, exportToWord, // Đã bộc lộ hàm exportToWord ra HTML
             handleLogin, handleRegister, logout, goHome, addQuestion, removeQuestion, saveExam,
             deleteExam, viewResults, startExam, handleFileUpload, submitExam, switchView,
             getRoleName, getRoleBadgeClass, deleteUser, updateUserRole,
