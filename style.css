@@ -77,3 +77,16 @@ body {
     66% { transform: translate(-20px, 20px) scale(0.9); }
     100% { transform: translate(0px, 0px) scale(1); }
 }
+/* Ngăn chặn bôi đen văn bản trên toàn bộ ứng dụng khi đang thi */
+.no-select {
+    -webkit-user-select: none; /* Safari */
+    -ms-user-select: none;     /* IE 10+ */
+    user-select: none;         /* Thư viện chuẩn */
+}
+
+/* Vẫn cho phép nhập liệu vào các ô input và textarea */
+input, textarea {
+    -webkit-user-select: text !important;
+    -ms-user-select: text !important;
+    user-select: text !important;
+}
