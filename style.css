@@ -90,3 +90,28 @@ input, textarea {
     -ms-user-select: text !important;
     user-select: text !important;
 }
+/* style.css */
+@keyframes progress {
+    0% { width: 0%; }
+    50% { width: 70%; }
+    100% { width: 100%; }
+}
+
+.animate-progress {
+    animation: progress 2s infinite ease-in-out;
+}
+/* style.css */
+@media (max-width: 768px) {
+    input, textarea, button {
+        font-size: 16px !important; /* Tránh iOS tự động zoom khi focus vào input */
+    }
+    
+    .exam-room-container {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+}
+
+* {
+    -webkit-tap-highlight-color: transparent;
+}
