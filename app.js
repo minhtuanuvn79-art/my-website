@@ -51,10 +51,12 @@ watch(teacherTab, (newTab) => {
         const timerInterval = ref(null);
         const studentAnswers = ref([]);
 
-// Tìm và thay thế đoạn watch cũ
-watch(() => [...studentAnswers.value], () => {
-    if (view.value === 'exam-room') {
+// Tự động lưu bài vào máy học sinh mỗi khi chọn đáp án
+watch(studentAnswers, (newVal) => {
+    if (view.value === 'exam-room' && currentExam.value) {
         sendRealtimeUpdate();
+        // Lưu backup
+        localStorage.setItem(`eduexam_backup_${currentExam.value.id}`, JSON.stringify(newVal));
     }
 }, { deep: true });
         const finalResult = ref({ score: 0, correct: 0 });
@@ -158,10 +160,12 @@ const defaultSettings = {
 
 const handleVisibilityChange = () => {
     if (view.value === 'exam-room' && document.hidden) {
+        
+        // --- THÊM DÒNG NÀY ĐỂ CHẶN ĐẾM TRÙNG ---
+        if (showFullscreenOverlay.value) return;
+
         if (currentExam.value?.settings?.autoMonitor !== false) {
             cheatWarnings.value++;
-            
-            // GÁN THÔNG BÁO CỤ THỂ
             cheatMessage.value = `Bạn vừa thực hiện hành vi chuyển Tab hoặc rời khỏi trình duyệt.`;
             showFullscreenOverlay.value = true;
 
@@ -174,9 +178,31 @@ const handleVisibilityChange = () => {
         }
     }
 };
+const handleWindowBlur = () => {
+    // Chỉ kích hoạt khi đang ở phòng thi và không phải đang chờ AI chấm bài
+    if (view.value === 'exam-room' && !isAIGradingSubmission.value) {
+        
+        // Tránh trùng lặp cảnh báo nếu cả visibilitychange và blur cùng kích hoạt
+        if (showFullscreenOverlay.value) return; 
+
+        if (currentExam.value?.settings?.autoMonitor !== false) {
+            cheatWarnings.value++;
+            
+            // Thông báo cụ thể hơn cho học sinh
+            cheatMessage.value = `Bạn vừa mất tiêu điểm khỏi bài thi (Click ra ngoài hoặc mở app khác).`;
+            showFullscreenOverlay.value = true;
+
+            sendRealtimeUpdate(`Mất focus/Chuyển Tab (${cheatWarnings.value})`); 
+            
+            if (cheatWarnings.value >= 3) {
+                showNotify("Vi phạm quá 3 lần. Hệ thống tự động thu bài!", "error");
+                submitExam(false); 
+            }
+        }
+    }
+};
 // Tìm hàm này trong app.js và thay thế nội dung
 const handleFullscreenChange = () => {
-    // Kiểm tra đa nền tảng (Chrome, Safari, Firefox)
     const isFull = !!(document.fullscreenElement || 
                       document.webkitFullscreenElement || 
                       document.mozFullScreenElement || 
@@ -184,11 +210,12 @@ const handleFullscreenChange = () => {
     
     isFullscreen.value = isFull; 
 
-    // Quan trọng: Chỉ kiểm tra khi đang ở màn hình làm bài
     if (view.value === 'exam-room') {
-        // Nếu không ở Fullscreen VÀ không phải đang khởi động bài thi
         if (!isFull && !isExamStarting.value) {
             if (isAIGradingSubmission.value) return;
+
+            // --- THÊM DÒNG NÀY ĐỂ CHẶN ĐẾM TRÙNG ---
+            if (showFullscreenOverlay.value) return;
 
             cheatWarnings.value++;
             cheatMessage.value = `Bạn vừa thoát khỏi chế độ Toàn màn hình (Fullscreen).`;
@@ -202,7 +229,6 @@ const handleFullscreenChange = () => {
                 submitExam(false); 
             }
         } else if (isFull) {
-            // Nếu học sinh đã quay lại Fullscreen thành công
             showFullscreenOverlay.value = false;
         }
     }
@@ -281,8 +307,9 @@ onMounted(async () => {
         console.warn("Dữ liệu ban đầu chưa tải hết, hệ thống sẽ thử lại sau.");
     }
 
-    // 3. ĐĂNG KÝ CÁC SỰ KIỆN GIÁM SÁT (Dành cho học sinh)
+// 3. ĐĂNG KÝ CÁC SỰ KIỆN GIÁM SÁT (Dành cho học sinh)
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur); // Thêm dòng này
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
 
@@ -461,13 +488,14 @@ const startMonitoring = (exam) => {
                 // Lấy session đầu tiên của user này trong kênh
                 const data = state[id][0]; 
                 if (data && data.studentName) {
-                    newActiveList[data.studentName] = {
-                        progress: data.progress || 0,
-                        total: data.total || 0,
-                        cheats: data.cheats || 0,
-                        status: data.status || 'Đang làm bài',
-                        lastUpdate: data.lastUpdate
-                    };
+newActiveList[data.studentName] = {
+        progress: data.progress || 0,
+        percent: data.percent || 0, // Nhận % từ học sinh
+        total: data.total || 0,
+        cheats: data.cheats || 0,
+        status: data.status || 'Đang làm bài',
+        lastUpdate: data.lastUpdate
+    };
                 }
             }
             // Cập nhật lại toàn bộ object để Vue trigger UI
@@ -475,29 +503,46 @@ const startMonitoring = (exam) => {
         })
         .subscribe();
 };
-const sendRealtimeUpdate = async (statusText = 'Đang làm bài') => {
+let lastUpdateTime = 0; // Biến lưu thời gian gửi lần cuối
+
+const sendRealtimeUpdate = async (statusText = 'Đang làm bài', force = false) => {
     if (!studentChannel || !currentExam.value) return;
     
+    // --- BỘ LỌC CHỐNG SPAM (THROTTLE) ---
+    const now = Date.now();
+    // Nếu không phải gửi ép buộc (lúc nộp bài) và chưa qua 2 giây thì bỏ qua
+    if (!force && now - lastUpdateTime < 2000) return; 
+    lastUpdateTime = now;
+
     const currentProgress = studentAnswers.value.filter((ans, i) => {
         const q = currentExam.value.questions[i];
         if (!q) return false;
         if (q.type === 'mc') return ans.choice !== null;
-        if (q.type === 'tf') return Array.isArray(ans.choice) && ans.choice.some(c => c !== null);
+        // Câu Đúng/Sai: Phải chọn đủ 4 ý mới tính là xong 1 câu
+        if (q.type === 'tf') return Array.isArray(ans.choice) && ans.choice.every(c => c !== null); 
         if (q.type === 'sa' || q.type === 'essay') return (ans.text && ans.text.trim() !== '');
         return false;
     }).length;
 
-    // Gộp tên và lớp để hiển thị chính xác trên màn hình giáo viên
+    // TÍNH PHẦN TRĂM (%)
+    const total = currentExam.value.questions.length;
+    const percent = total > 0 ? Math.round((currentProgress / total) * 100) : 0;
+
     const identity = `${studentProfile.value.fullName} (${studentProfile.value.className})`;
 
-    await studentChannel.track({ 
-        studentName: identity, 
-        progress: currentProgress, 
-        total: currentExam.value.questions.length, 
-        cheats: cheatWarnings.value, 
-        status: statusText, 
-        lastUpdate: Date.now() 
-    });
+    try {
+        await studentChannel.track({ 
+            studentName: identity, 
+            progress: currentProgress, 
+            percent: percent, // Thêm dòng này để gửi %
+            total: total, 
+            cheats: cheatWarnings.value, 
+            status: statusText, 
+            lastUpdate: now 
+        });
+    } catch (err) {
+        console.warn("Lỗi đồng bộ Realtime:", err);
+    }
 };
 
        const addQuestion = (type) => {
@@ -847,30 +892,55 @@ const handleGenerateAI = async () => {
         // QUẢN LÝ CHẤM ĐIỂM (GIÁO VIÊN & AI CHẤM TỰ LUẬN)
         // ==========================================
 const openGradingModal = (result) => { 
+    // 1. Gán kết quả hiện tại vào state để hiển thị thông tin học sinh
     currentGradingResult.value = result; 
+    
+    // 2. Tìm đề thi tương ứng để lấy nội dung câu hỏi gốc
     const exam = exams.value.find(e => e.id === result.examId);
     
     if (exam && result.studentAnswersLog) {
+        // 3. Khởi tạo mảng điểm cho từng câu (questionScores)
         questionScores.value = result.studentAnswersLog.map((ans, i) => {
-            // Ưu tiên lấy điểm đã chấm tay trước đó (nếu có)
-            if (ans.score !== undefined && ans.score !== null) return ans.score; 
+            // Nếu câu hỏi này đã được chấm tay trước đó (có thuộc tính score) thì lấy điểm đó
+            if (ans.score !== undefined && ans.score !== null) {
+                return ans.score; 
+            }
             
-            // Nếu chưa chấm tay, tính lại dựa trên đáp án gốc
+            // Nếu chưa chấm tay, tính điểm mặc định dựa trên loại câu hỏi
             const q = exam.questions[i]; 
+            if (!q) return 0;
+
             const p = parseFloat(q.points) || 0;
-            if (q.type === 'mc') return (ans.choice === q.correct) ? p : 0;
+
+            // Tự động tính điểm cho Trắc nghiệm (Phần I)
+            if (q.type === 'mc') {
+                return (ans.choice === q.correct) ? p : 0;
+            }
+
+            // Tự động tính điểm cho Đúng/Sai (Phần II) theo thang điểm cấu hình
             if (q.type === 'tf') { 
                 let match = 0; 
-                if(ans.choice) {
-                    for (let j=0; j<4; j++) if (ans.choice[j]===q.correct[j]) match++; 
+                if (Array.isArray(ans.choice)) {
+                    for (let j = 0; j < 4; j++) {
+                        if (ans.choice[j] === q.correct[j]) match++; 
+                    }
                 }
                 const scale = exam.settings?.tfGradingScale || [0, 0.1, 0.25, 0.5, 1.0]; 
                 return (scale[match] || 0) * p; 
             }
+
+            // Đối với Tự luận (Phần III), mặc định để 0 để giáo viên tự nhập điểm sau khi đọc bài
             return 0; 
         });
+    } else {
+        // Nếu không có dữ liệu log bài làm, khởi tạo mảng rỗng
+        questionScores.value = [];
     }
-    updateTotalScore(); // Tự động tính lại manualScore
+
+    // 4. Cập nhật lại tổng điểm hiển thị trên Modal
+    updateTotalScore(); 
+    
+    // 5. Mở Modal giao diện
     gradingModal.value = true; 
 };
 
@@ -926,6 +996,7 @@ const realtimeTicker = setInterval(() => {
         const formattedTime = computed(() => { const m = Math.floor(timeLeft.value / 60); const s = timeLeft.value % 60; return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`; });
 
 const submitExam = async (isManual = false) => {
+    // 1. Xác nhận nộp bài thủ công
     if (isManual) {
         const confirmMsg = "Xác nhận kết thúc bài thi và nộp bài?";
         if (!confirm(confirmMsg)) return;
@@ -935,15 +1006,18 @@ const submitExam = async (isManual = false) => {
     const previousView = view.value;
     view.value = 'result'; 
 
+    // 2. Dừng bộ đếm thời gian
     if (timerInterval.value) clearInterval(timerInterval.value);
     
+    // 3. Thoát chế độ toàn màn hình một cách an toàn
     if (document.fullscreenElement && document.exitFullscreen) {
         try { await document.exitFullscreen(); } catch (err) { console.log(err); }
     }
 
+    // 4. Gửi tín hiệu cuối cùng cho giám thị và ngắt kết nối kênh phòng thi
     if (studentChannel) {
         const statusText = cheatWarnings.value >= 3 ? 'Bị thu bài (Gian lận)' : 'Đã nộp bài';
-        await sendRealtimeUpdate(statusText);
+        await sendRealtimeUpdate(statusText, true);
         supabaseClient.removeChannel(studentChannel);
     }
 
@@ -951,6 +1025,7 @@ const submitExam = async (isManual = false) => {
         let resData = null;
         const displayIdentity = `${studentProfile.value.fullName} - Lớp: ${studentProfile.value.className}`;
 
+        // 5. XỬ LÝ CHẤM ĐIỂM (Đề Quiz Hỗn hợp)
         if (currentExam.value.type === 'quiz') {
             let userScore = 0;
             let correctCount = 0;
@@ -960,12 +1035,14 @@ const submitExam = async (isManual = false) => {
                 const ans = studentAnswers.value[i];
                 const p = parseFloat(q.points) || 0;
 
+                // Chấm Trắc nghiệm 1 đáp án đúng
                 if (q.type === 'mc') {
                     if (ans.choice === q.correct) {
                         correctCount++;
                         userScore += p;
                     }
                 } 
+                // Chấm Đúng/Sai dạng chùm 4 ý
                 else if (q.type === 'tf') {
                     let match = 0;
                     if (ans.choice && Array.isArray(ans.choice)) {
@@ -977,11 +1054,13 @@ const submitExam = async (isManual = false) => {
                     userScore += (scale[match] || 0) * p;
                     if (match === 4) correctCount++;
                 } 
+                // Ghi nhận có tự luận để treo cờ "Chờ chấm"
                 else if (q.type === 'sa' || q.type === 'essay') {
                     if ((ans.text && ans.text.trim() !== '') || ans.fileData) hasEssay = true;
                 }
             });
 
+            // Làm tròn điểm số 2 chữ số thập phân
             userScore = Math.round(userScore * 100) / 100;
 
             resData = { 
@@ -997,7 +1076,9 @@ const submitExam = async (isManual = false) => {
             };
 
             finalResult.value = { score: userScore, correct: correctCount };
-        } else {
+        } 
+        // 6. XỬ LÝ CHẤM ĐIỂM (Đề Tự luận 1 File)
+        else {
             resData = { 
                 id: Date.now(), 
                 examId: currentExam.value.id, 
@@ -1011,27 +1092,30 @@ const submitExam = async (isManual = false) => {
             };
         }
 
-        // LƯU VÀO CƠ SỞ DỮ LIỆU
+        // 7. LƯU VÀO CƠ SỞ DỮ LIỆU SUPABASE
         const { error } = await supabaseClient.from('results').insert([resData]);
         
         if (error) throw error;
 
-        allResults.value.unshift(resData); // Thêm vào đầu danh sách để thấy ngay kết quả
+        allResults.value.unshift(resData); // Thêm vào đầu danh sách để thấy ngay kết quả trên dashboard
         showNotify(cheatWarnings.value >= 3 ? "Tự động thu bài!" : "Nộp bài thành công!");
         
+        // 8. TÍNH NĂNG MỚI: XÓA BẢN NHÁP LOCALSTORAGE KHI NỘP THÀNH CÔNG
+        localStorage.removeItem(`eduexam_backup_${currentExam.value.id}`);
+        
+        // 9. Kích hoạt AI chấm nền nếu có câu tự luận
         if (currentExam.value.type === 'quiz' && resData.status === 'pending') {
             backgroundAIGrading(resData, currentExam.value); 
         }
 
     } catch (err) {
         console.error("Lỗi nộp bài:", err);
-        view.value = previousView;
+        view.value = previousView; // Quay lại màn hình thi nếu lỗi
         showNotify("Lỗi nộp bài: " + err.message, "error");
     } finally {
-        isAIGradingSubmission.value = false;
+        isAIGradingSubmission.value = false; // Tắt màn hình chờ chấm điểm
     }
 };
-
 // Thêm hàm cuộn tới câu hỏi (Helper function)
 const scrollToQuestion = (idx) => {
     const el = document.getElementById('question-' + idx);
@@ -1119,7 +1203,6 @@ const unpublishExam = async (exam) => {
         showNotify("Lỗi: " + error.message, "error");
     }
 };
-let realtimeChannel = null; // Dùng biến này để quản lý kênh duy nhất
 
 const subscribeToExamChanges = async () => {
     // 1. Nếu không có user thì không kết nối
@@ -1216,7 +1299,12 @@ const confirmStartExam = async () => {
         text: '',
         fileData: null
     }));
-
+const backup = localStorage.getItem(`eduexam_backup_${exam.id}`);
+    if (backup) {
+        if (confirm("Hệ thống tìm thấy bản nháp đang làm dở. Bạn có muốn khôi phục lại đáp án không?")) {
+            studentAnswers.value = JSON.parse(backup);
+        }
+    }
     // 5. Cài đặt các thông số phòng thi
     currentExam.value = examCopy;
     timeLeft.value = examCopy.time * 60;
@@ -1318,7 +1406,40 @@ const exportToExcel = () => {
     
     showNotify("Đã xuất danh sách kết quả ra file Excel!");
 };
+// --- STATE MỚI CHO CHỨC NĂNG IN ---
+const showPrintModal = ref(false);
+const printData = ref(null); // Lưu trữ bản sao kết quả để chỉnh sửa trước khi in
+
+// Hàm mở modal in và chuẩn bị dữ liệu
+const openPrintPreview = (result) => {
+    const exam = exams.value.find(e => e.id === result.examId);
+    // Tạo bản sao sâu để chỉnh sửa không ảnh hưởng đến Database
+    printData.value = {
+        ...JSON.parse(JSON.stringify(result)),
+        examTitle: exam?.title || 'BÀI KIỂM TRA',
+        questions: exam?.questions || []
+    };
+    showPrintModal.value = true;
+};
+
+// Hàm xuất PDF từ HTML
+const exportToPDF = () => {
+    const element = document.getElementById('printable-sheet');
+    const opt = {
+        margin: 0,
+        filename: `Phieu_Ket_Qua_${printData.value.studentName}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
+};
+
 return {
+    exportToPDF,
+    openPrintPreview,
+    printData,
+    showPrintModal,
     exportToExcel,
     showFullscreenOverlay,
     cheatMessage,

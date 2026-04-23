@@ -124,3 +124,87 @@ input, textarea {
     from { opacity: 0; transform: scale(0.9) translateY(20px); }
     to { opacity: 1; transform: scale(1) translateY(0); }
 }
+/* Đảm bảo nội dung nhúng (v-html) như Hình ảnh không bao giờ vỡ khung trên điện thoại */
+[v-html] img, [v-html] table {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    overflow-x: auto;
+    display: block;
+}
+
+[v-html] p {
+    margin-bottom: 0.5rem;
+}
+/* style.css */
+.fixed .shadow-2xl {
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+/* Hiệu ứng nhấp nháy nhẹ khi thời gian sắp hết (dưới 5 phút) */
+@keyframes timeUrgent {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); border-color: #f87171; }
+}
+
+.bg-red-600 {
+    animation: timeUrgent 2s infinite ease-in-out;
+}
+/* Tăng độ đậm và nét cho phiếu in */
+.bg-lines {
+    background-image: linear-gradient(#d1d5db 1px, transparent 1px);
+    background-size: 100% 30px; /* Dòng kẻ thưa cho dễ đọc */
+    line-height: 30px;
+}
+
+@media print {
+    /* Ép trình duyệt phải in màu nền (ô đã tô đen) */
+    .bg-black {
+        background-color: black !important;
+        color: white !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    
+    .print-page {
+        page-break-after: always; /* Tự động ngắt trang A4 */
+        border: 2px solid black !important;
+    }
+    
+    /* Ẩn mọi thứ linh tinh khi in */
+    nav, button, .no-print {
+        display: none !important;
+    }
+}
+
+#printable-sheet .rounded-full {
+    border: 1.5px solid black !important;
+}
+/* Dòng kẻ ô ly mẫu 2025 */
+.bg-lines-2025 {
+    background-image: linear-gradient(#cfd5db 1px, transparent 1px);
+    background-size: 100% 28px;
+    background-attachment: local;
+    line-height: 28px;
+}
+
+@media print {
+    .print-page {
+        page-break-after: always;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    
+    /* Làm đậm các ô tròn để máy chấm hoặc giáo viên dễ nhìn */
+    .bg-black {
+        background-color: #000 !important;
+        color: #fff !important;
+        border: 1px solid #000 !important;
+    }
+    
+    .border-black { border-color: #000 !important; }
+}
+
+.print-container {
+    box-sizing: border-box;
+}
