@@ -831,20 +831,35 @@
     <div v-if="view === 'exam-room'" class="min-h-screen bg-gray-50 no-select">
     
 <div v-if="showFullscreenOverlay" 
-     class="fixed inset-0 z-[999] bg-gray-900/95 backdrop-blur-md flex flex-col items-center justify-center text-center p-6">
-    <div class="bg-white p-10 rounded-[3rem] shadow-2xl max-w-md">
-        <span class="text-6xl mb-6 block">⚠️</span>
-        <h2 class="text-2xl font-black text-red-600 mb-4">CẢNH BÁO VI PHẠM</h2>
-        <p class="text-gray-600 font-medium mb-8">
-            Bạn vừa thoát khỏi chế độ toàn màn hình. Vui lòng quay lại để tiếp tục bài thi.
-        </p>
-        <button @click="enterFullScreen" 
-                class="w-full bg-blue-600 text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all text-lg">
-            QUAY LẠI TOÀN MÀN HÌNH ➔
-        </button>
-        <p class="mt-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-            Vi phạm lần: {{ cheatWarnings }}/3
-        </p>
+     class="fixed inset-0 z-[999] bg-gray-900/40 backdrop-blur-xl flex items-center justify-center p-4">
+    
+    <div class="bg-white/90 glass-card p-10 rounded-[3rem] shadow-2xl max-w-md w-full text-center border border-white/50 relative overflow-hidden">
+        
+        <div class="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-red-500 via-orange-500 to-red-500"></div>
+
+        <div class="mb-6">
+            <div class="w-20 h-20 bg-red-100 text-red-600 rounded-3xl flex items-center justify-center mx-auto mb-4 animate-pulse">
+                <svg class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+            </div>
+            <h2 class="text-3xl font-black text-gray-900 tracking-tight">PHÁT HIỆN VI PHẠM</h2>
+            
+            <p class="text-red-600 font-bold mt-4 px-4 py-2 bg-red-50 rounded-xl border border-red-100">
+                {{ studentProfile.fullName }}: {{ cheatMessage }}
+            </p>
+        </div>
+
+        <div class="space-y-4">
+            <button @click="enterFullScreen" 
+                    class="w-full bg-gray-900 text-white font-black py-4 rounded-2xl hover:bg-blue-600 transition-all duration-300">
+                TÔI ĐÃ HIỂU VÀ QUAY LẠI ➔
+            </button>
+            
+            <div class="flex items-center justify-center gap-2 py-2">
+                <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Vi phạm: {{ cheatWarnings }}/3</span>
+            </div>
+        </div>
     </div>
 </div>
 </div> 
