@@ -7,11 +7,6 @@ let studentChannel = null;
 let teacherChannel = null;
 let realtimeChannel = null;
 
-// Danh sách tài khoản mặc định
-const FIXED_ACCOUNTS = [
-    { id: 1, name: 'admin', password: '123', role: 'admin' },
-    { id: 2, name: 'teacher', password: '123', role: 'teacher' }
-];
 createApp({
     setup() {
         // Lấy lại trang và tab cũ từ bộ nhớ trình duyệt (nếu có)
@@ -42,8 +37,17 @@ watch(teacherTab, (newTab) => {
         const users = ref([]);
         const exams = ref([]);
         const allResults = ref([]);
-        const searchUser = ref('');
+        const searchUserQuery = ref('');
+        const filterRole = ref('all'); // Chuyển từ dòng 736 lên đây
+        const currentPage = ref(1);    // Chuyển lên đây
+        const itemsPerPage = 20;       // Chuyển lên đây
         
+const showEditModal = ref(false);
+const editUserData = ref({ id: null, name: '', password: '', role: 'student' });
+const showDeleteConfirm = ref(false);
+const userToDelete = ref(null);
+const selectedUsers = ref([]);
+const showBulkDeleteConfirm = ref(false);
         // Các biến hỗ trợ khác
         const isFullscreen = ref(false);
         const cheatWarnings = ref(0);
@@ -265,13 +269,13 @@ const loadData = async () => {
         const { data: examData } = await supabaseClient.from('exams').select('*').order('id', { ascending: false });
         if (examData) exams.value = examData;
 
-        // TẢI NGƯỜI DÙNG: Bổ sung đoạn này để đồng bộ tài khoản giữa các máy
+        // TẢI NGƯỜI DÙNG: Chỉ lấy từ Database
         const { data: userData } = await supabaseClient.from('users').select('*');
         if (userData) {
-            users.value = [...FIXED_ACCOUNTS, ...userData];
+            users.value = userData; // Loại bỏ [...FIXED_ACCOUNTS]
         }
         
-        console.log("✅ Dữ liệu đã được đồng bộ từ Cloud");
+        console.log("✅ Dữ liệu người dùng đã đồng bộ từ Cloud");
     } catch (err) {
         console.error("Lỗi loadData:", err);
     }
@@ -289,31 +293,71 @@ const fetchResults = async () => {
         console.error("Lỗi khi tải kết quả:", err.message);
     }
 };
+const fetchUsers = async () => {
+    const { data, error } = await supabaseClient
+        .from('users')
+        .select('*')
+        .order('id', { ascending: true });
+
+    if (error) {
+        showNotify("Lỗi tải danh sách người dùng", "error");
+    } else {
+        // Chỉ gán dữ liệu từ DB, không gộp FIXED_ACCOUNTS
+        users.value = data || []; 
+    }
+};
+const addUser = async () => {
+    if (!newUserName.value || !newUserPass.value) return;
+
+    const { data, error } = await supabaseClient
+        .from('users')
+        .insert([{ 
+            name: newUserName.value, 
+            password: newUserPass.value, 
+            role: newUserRole.value 
+        }])
+        .select(); // Thêm .select() để lấy dữ liệu vừa tạo
+
+    if (!error) {
+        // Cập nhật ngay vào danh sách hiển thị
+        if (data) users.value.unshift(data[0]); 
+        showAddUserModal.value = false;
+        newUserName.value = ''; newUserPass.value = '';
+        showNotify("Thêm tài khoản thành công!");
+    } else {
+        showNotify("Lỗi: " + error.message, "error");
+    }
+};
         let isRealtimeSubscribed = false;
 onMounted(async () => {
-    // 1. Khôi phục người dùng từ LocalStorage
-    const savedUser = localStorage.getItem('eduexam_user');
-    if (savedUser) {
-        currentUser.value = JSON.parse(savedUser);
-        // Tự động đăng ký lại hệ thống đồng bộ Realtime
-        subscribeToExamChanges();
-    }
-
-    // 2. Tải dữ liệu ban đầu từ Cloud
+    // 1. TẢI DỮ LIỆU CƠ BẢN TUẦN TỰ
     try {
-        await loadData();
-        await fetchResults(); 
+        // Tải danh sách người dùng ngay lập tức để phục vụ Đăng nhập/Quản trị
+        await fetchUsers();
+
+        // Dãn cách 500ms để trình duyệt rảnh tay tải Font/CSS (Tránh lỗi INSUFFICIENT_RESOURCES)
+        setTimeout(async () => {
+            await loadData();
+            await fetchResults();
+            
+            // Khôi phục phiên đăng nhập nếu có
+            const savedUser = localStorage.getItem('eduexam_user');
+            if (savedUser) {
+                currentUser.value = JSON.parse(savedUser);
+                subscribeToExamChanges();
+            }
+        }, 500);
     } catch (err) {
-        console.warn("Dữ liệu ban đầu chưa tải hết, hệ thống sẽ thử lại sau.");
+        console.warn("Dữ liệu ban đầu chưa tải hết:", err);
     }
 
-// 3. ĐĂNG KÝ CÁC SỰ KIỆN GIÁM SÁT (Dành cho học sinh)
+    // 2. ĐĂNG KÝ CÁC SỰ KIỆN GIÁM SÁT GIAN LẬN
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('blur', handleWindowBlur); // Thêm dòng này
+    window.addEventListener('blur', handleWindowBlur);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
 
-    // 4. CHẶN CHUỘT PHẢI TRONG PHÒNG THI
+    // 3. CHẶN CHUỘT PHẢI TRONG PHÒNG THI
     document.addEventListener('contextmenu', (e) => {
         if (view.value === 'exam-room') {
             e.preventDefault();
@@ -321,40 +365,37 @@ onMounted(async () => {
         }
     });
 
-    // 5. CHẶN GIAN LẬN & LẮNG NGHE PHÍM ESC
+    // 4. CHẶN PHÍM TẮT GIAN LẬN (F12, Ctrl+C, Ctrl+V, ESC)
     document.addEventListener('keydown', (e) => {
         if (view.value === 'exam-room') {
             
-            // Bắt phím Esc (Escape)
+            // Bắt phím Esc khi thoát Fullscreen
             if (e.key === 'Escape' || e.keyCode === 27) {
-                // Đợi 100ms để trình duyệt thực hiện lệnh thoát Fullscreen rồi mới check
-                setTimeout(() => {
-                    handleFullscreenChange();
-                }, 100);
+                setTimeout(() => { handleFullscreenChange(); }, 100);
             }
 
-            // Chặn F12 (Inspect Element)
+            // Chặn F12
             if (e.key === 'F12') {
                 e.preventDefault();
                 cheatWarnings.value++;
                 cheatMessage.value = `Bạn vừa cố gắng mở công cụ nhà phát triển (F12).`;
                 showFullscreenOverlay.value = true;
-                sendRealtimeUpdate(`Dùng phím F12 (${cheatWarnings.value})`);
+                sendRealtimeUpdate(`Dùng phím F12 (${cheatWarnings.value})`, true);
             }
             
-            // Chặn Ctrl + C, V, U, S (Copy, Paste, View Source, Save)
+            // Chặn Copy, Paste, View Source
             if ((e.ctrlKey || e.metaKey) && ['c', 'v', 'u', 's'].includes(e.key.toLowerCase())) {
                 e.preventDefault();
                 cheatWarnings.value++;
-                cheatMessage.value = `Bạn vừa cố gắng sử dụng phím tắt sao chép hoặc can thiệp trái phép.`;
+                cheatMessage.value = `Bạn vừa cố gắng sử dụng phím tắt bị chặn.`;
                 showFullscreenOverlay.value = true;
-                sendRealtimeUpdate(`Dùng phím tắt forbidden (${cheatWarnings.value})`);
+                sendRealtimeUpdate(`Dùng phím tắt forbidden (${cheatWarnings.value})`, true);
             }
         }
     });
 
-    // 6. HIỆU ỨNG UI & MATHJAX (Nếu có)
-    if (window.MathJax) {
+    // 5. KHỞI TẠO CÔNG THỨC TOÁN HỌC MATHJAX
+    if (window.MathJax && window.MathJax.typesetPromise) {
         window.MathJax.typesetPromise();
     }
     
@@ -376,61 +417,45 @@ onMounted(async () => {
         };
 
 const handleLogin = async () => {
-    // 1. Kiểm tra tính hợp lệ của đầu vào
     if (!authForm.value.name.trim() || !authForm.value.password.trim()) {
         return showNotify("Vui lòng nhập tên và mật khẩu", "error");
     }
     
-    let user = null;
-
     try {
-        // 2. Kiểm tra trong danh sách tài khoản mặc định (FIXED_ACCOUNTS)
-        user = FIXED_ACCOUNTS.find(u => u.name.toLowerCase() === authForm.value.name.toLowerCase());
+        // Truy vấn trực tiếp từ Supabase
+        const { data: user, error } = await supabaseClient
+            .from('users')
+            .select('*')
+            .eq('name', authForm.value.name)
+            .maybeSingle();
+        
+        if (error) throw error;
 
-        // 3. Nếu không phải tài khoản mặc định, truy vấn từ Supabase
         if (!user) {
-            const { data, error } = await supabaseClient
-                .from('users')
-                .select('*')
-                .eq('name', authForm.value.name)
-                .maybeSingle();
-            
-            if (error) throw error;
-            user = data;
+            return showNotify("Tài khoản không tồn tại", "error");
         }
+        
+        if (user.password !== authForm.value.password) {
+            return showNotify("Mật khẩu không chính xác", "error");
+        }
+
+        // Lưu thông tin và điều hướng
+        currentUser.value = user;
+        localStorage.setItem('eduexam_user', JSON.stringify(user));
+        
+        if (user.role === 'admin' || user.role === 'teacher') {
+            view.value = 'teacher-dash';
+            teacherTab.value = 'exams';
+        } else {
+            view.value = 'student-dash';
+        }
+        
+        showNotify(`Chào mừng ${user.name}!`);
+        subscribeToExamChanges();
     } catch (err) {
         console.error("Lỗi đăng nhập:", err.message);
-        return showNotify("Lỗi kết nối hệ thống. Vui lòng thử lại sau.", "error");
+        return showNotify("Lỗi kết nối hệ thống", "error");
     }
-
-    // 4. Xác thực tài khoản và mật khẩu
-    if (!user) {
-        return showNotify("Tài khoản không tồn tại trên hệ thống", "error");
-    }
-    
-    if (user.password !== authForm.value.password) {
-        return showNotify("Mật khẩu không chính xác", "error");
-    }
-
-    // 5. Lưu thông tin người dùng vào State và LocalStorage
-    currentUser.value = user;
-    localStorage.setItem('eduexam_user', JSON.stringify(user));
-    
-    // 6. XỬ LÝ PHÂN QUYỀN VÀ ĐIỀU HƯỚNG (Điều chỉnh theo yêu cầu của bạn)
-    // Nếu là Admin hoặc Giáo viên: Mặc định vào trang Dashboard của Giáo viên
-    if (user.role === 'admin' || user.role === 'teacher') {
-        view.value = 'teacher-dash';
-        teacherTab.value = 'exams'; // Mặc định mở tab quản lý đề thi
-    } else {
-        // Nếu là Học sinh: Vào trang Dashboard của học sinh
-        view.value = 'student-dash';
-    }
-    
-    // 7. Thông báo và khởi tạo các dịch vụ thời gian thực
-    showNotify(`Chào mừng ${user.name} đã quay trở lại!`);
-    
-    // Kích hoạt lắng nghe thay đổi đề thi từ Cloud
-    subscribeToExamChanges();
 };
 
 const logout = () => {
@@ -462,15 +487,61 @@ const goHome = () => {
     }
 };
 
-const filteredUsers = computed(() => searchUser.value ? users.value.filter(u => u.name.toLowerCase().includes(searchUser.value.toLowerCase())) : users.value);
+// 1. Lọc theo tìm kiếm và theo Vai trò
+const filteredUsers = computed(() => {
+    // Bây giờ filterRole đã tồn tại nên sẽ không lỗi nữa
+    let result = users.value.filter(u => 
+        u.name.toLowerCase().includes(searchUserQuery.value.toLowerCase())
+    );
+
+    if (filterRole.value !== 'all') {
+        result = result.filter(u => u.role === filterRole.value);
+    }
+    return result;
+});
+// Thêm vào trong phần setup() của Vue app trong app.js
+const getOffset = (type) => {
+    if (!printData.value || !printData.value.questions) return 0;
+    if (type === 'mc') return printData.value.questions.filter(q => q.type === 'mc').length;
+    return 0;
+};
+
+const getTfScore = (idx, q) => {
+    const studentAns = printData.value.studentAnswersLog[idx + getOffset('mc')];
+    if (!studentAns || !studentAns.choice) return 0;
+    
+    let match = 0;
+    for (let i = 0; i < 4; i++) {
+        if (studentAns.choice[i] === q.correct[i]) match++;
+    }
+    const scale = [0, 0.1, 0.25, 0.5, 1.0]; // Thang điểm chuẩn
+    return (scale[match] * (q.points || 1)).toFixed(2);
+};
+
+
+const paginatedUsers = computed(() => {
+    const start = (currentPage.value - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    return filteredUsers.value.slice(start, end);
+});
+
+// 3. Tính tổng số trang
+const totalPages = computed(() => {
+    return Math.ceil(filteredUsers.value.length / itemsPerPage) || 1;
+});
+
+// Watcher: Reset về trang 1 khi người dùng lọc hoặc tìm kiếm
+watch([searchUserQuery, filterRole], () => {
+    currentPage.value = 1;
+});
 const deleteUser = (user) => { 
     if (user.name === 'admin') return showNotify("Không thể xóa tài khoản Admin hệ thống!", "error");
-    userToDelete.value = user;
-    showDeleteConfirm.value = true; 
+    userToDelete.value = user; // Gán user vào biến tạm
+    showDeleteConfirm.value = true; // Mở Modal
 };
+
 const confirmDeleteUser = async () => {
     if (!userToDelete.value) return;
-    
     try {
         const { error } = await supabaseClient
             .from('users')
@@ -497,22 +568,30 @@ const openEditModal = (user) => {
     showEditModal.value = true; 
 };
 const saveUserEdit = async () => {
-    const { error } = await supabaseClient
-        .from('users')
-        .update({ 
-            name: editUserData.value.name, 
-            password: editUserData.value.password, 
-            role: editUserData.value.role 
-        })
-        .eq('id', editUserData.value.id);
+    try {
+        const { error } = await supabaseClient
+            .from('users')
+            .update({ 
+                name: editUserData.value.name, 
+                password: editUserData.value.password, 
+                role: editUserData.value.role 
+            })
+            .eq('id', editUserData.value.id);
 
-    if (!error) { 
-        const idx = users.value.findIndex(u => u.id === editUserData.value.id); 
-        if (idx !== -1) users.value[idx] = { ...editUserData.value }; 
-        showEditModal.value = false; 
-        showNotify("Đã lưu thông tin thành công."); 
-    } else {
-        showNotify("Lỗi cập nhật: " + error.message, "error");
+        if (!error) {
+            // Tìm và cập nhật lại trong mảng đang hiển thị
+            const index = users.value.findIndex(u => u.id === editUserData.value.id);
+            if (index !== -1) {
+                users.value[index] = { ...editUserData.value };
+            }
+            
+            showEditModal.value = false;
+            showNotify("Cập nhật tài khoản thành công!");
+        } else {
+            showNotify("Lỗi lưu dữ liệu: " + error.message, "error");
+        }
+    } catch (err) {
+        showNotify("Lỗi kết nối database", "error");
     }
 };
 
@@ -564,30 +643,37 @@ newActiveList[data.studentName] = {
         })
         .subscribe();
 };
-let lastUpdateTime = 0; // Biến lưu thời gian gửi lần cuối
+// Thêm biến này ở trên cùng setup() để theo dõi tiến độ trước đó
+let lastSentProgress = -1;
+let lastUpdateTime = 0; 
 
 const sendRealtimeUpdate = async (statusText = 'Đang làm bài', force = false) => {
     if (!studentChannel || !currentExam.value) return;
     
-    // --- BỘ LỌC CHỐNG SPAM (THROTTLE) ---
     const now = Date.now();
-    // Nếu không phải gửi ép buộc (lúc nộp bài) và chưa qua 2 giây thì bỏ qua
-    if (!force && now - lastUpdateTime < 2000) return; 
-    lastUpdateTime = now;
-
+    
+    // 1. TÍNH TOÁN TIẾN ĐỘ HIỆN TẠI
     const currentProgress = studentAnswers.value.filter((ans, i) => {
         const q = currentExam.value.questions[i];
         if (!q) return false;
         if (q.type === 'mc') return ans.choice !== null;
-        // Câu Đúng/Sai: Phải chọn đủ 4 ý mới tính là xong 1 câu
         if (q.type === 'tf') return Array.isArray(ans.choice) && ans.choice.every(c => c !== null); 
         if (q.type === 'sa' || q.type === 'essay') return (ans.text && ans.text.trim() !== '');
         return false;
     }).length;
 
-    // TÍNH PHẦN TRĂM (%)
     const total = currentExam.value.questions.length;
     const percent = total > 0 ? Math.round((currentProgress / total) * 100) : 0;
+
+    // 2. BỘ LỌC THROTTLE: Chặn gửi nếu không có thay đổi hoặc gửi quá nhanh (< 2 giây)
+    // Trừ trường hợp force = true (như lúc nộp bài hoặc bị bắt lỗi gian lận)
+    if (!force) {
+        if (currentProgress === lastSentProgress && statusText === 'Đang làm bài') return;
+        if (now - lastUpdateTime < 2000) return; 
+    }
+
+    lastSentProgress = currentProgress;
+    lastUpdateTime = now;
 
     const identity = `${studentProfile.value.fullName} (${studentProfile.value.className})`;
 
@@ -595,12 +681,13 @@ const sendRealtimeUpdate = async (statusText = 'Đang làm bài', force = false)
         await studentChannel.track({ 
             studentName: identity, 
             progress: currentProgress, 
-            percent: percent, // Thêm dòng này để gửi %
+            percent: percent, 
             total: total, 
             cheats: cheatWarnings.value, 
             status: statusText, 
             lastUpdate: now 
         });
+        console.log(`📡 Đã đồng bộ Realtime: ${percent}%`);
     } catch (err) {
         console.warn("Lỗi đồng bộ Realtime:", err);
     }
@@ -1496,11 +1583,59 @@ const exportToPDF = () => {
     html2pdf().set(opt).from(element).save();
 };
 // Thêm vào cùng nhóm với các ref khác như users, exams...
-const showEditModal = ref(false);
-const editUserData = ref({ id: null, name: '', password: '', role: 'student' });
-const showDeleteConfirm = ref(false);
-const userToDelete = ref(null);
+
+// Hàm chọn/bỏ chọn tất cả checkbox
+const toggleSelectAll = (event) => {
+    if (event.target.checked) {
+        // Chỉ chọn những user có ID (tức là đã lưu trong DB, không phải FIXED_ACCOUNTS)
+        selectedUsers.value = filteredUsers.value
+            .filter(u => u.id && u.name !== 'admin')
+            .map(u => u.id);
+    } else {
+        selectedUsers.value = [];
+    }
+};
+
+// Hàm thực hiện xóa hàng loạt
+const confirmBulkDelete = async () => {
+    if (selectedUsers.value.length === 0) return;
+
+    try {
+        const { error } = await supabaseClient
+            .from('users')
+            .delete()
+            .in('id', selectedUsers.value);
+
+        if (!error) {
+            // Cập nhật lại danh sách hiển thị
+            users.value = users.value.filter(u => !selectedUsers.value.includes(u.id));
+            showNotify(`Đã xóa thành công ${selectedUsers.value.length} tài khoản.`);
+            selectedUsers.value = []; // Reset danh sách chọn
+            showBulkDeleteConfirm.value = false;
+        } else {
+            showNotify("Lỗi xóa hàng loạt: " + error.message, "error");
+        }
+    } catch (err) {
+        showNotify("Lỗi kết nối hệ thống", "error");
+    }
+};
+
 return {
+    getTfScore,
+    getOffset,
+    itemsPerPage,
+    searchUserQuery,
+    totalPages,
+    paginatedUsers,
+    currentPage,
+    filterRole,
+    confirmBulkDelete,
+    toggleSelectAll,
+    showBulkDeleteConfirm,
+    selectedUsers,
+    showDeleteConfirm, // PHẢI THÊM DÒNG NÀY
+    userToDelete,      // PHẢI THÊM DÒNG NÀY
+    confirmDeleteUser,
     exportToPDF,
     openPrintPreview,
     printData,
@@ -1539,7 +1674,6 @@ return {
             newExam, 
             teacherTab, 
             notification, 
-            searchUser,
             showNotify, 
             handleLogin, 
             handleRegister, 

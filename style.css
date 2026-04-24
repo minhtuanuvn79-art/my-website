@@ -208,3 +208,36 @@ input, textarea {
 .print-container {
     box-sizing: border-box;
 }
+/* style.css */
+.bg-lines-2025 {
+    background-image: linear-gradient(#e5e7eb 1px, transparent 1px);
+    background-size: 100% 28px;
+    background-attachment: local;
+}
+
+@media print {
+    body { background: white !important; }
+    nav, button, .no-print { display: none !important; }
+    
+    .print-container {
+        width: 210mm;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+    }
+
+    .print-page {
+        page-break-after: always;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* Ép in màu nền đen và đỏ cho các ô đáp án */
+    .bg-black { background-color: #000 !important; color: #fff !important; }
+    .bg-red-500 { background-color: #ef4444 !important; color: #fff !important; }
+    .border-green-500 { border: 2px solid #22c55e !important; }
+}
+
+/* Thanh cuộn cho preview mượt mà */
+.custom-scrollbar::-webkit-scrollbar { width: 8px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #64748b; border-radius: 10px; }

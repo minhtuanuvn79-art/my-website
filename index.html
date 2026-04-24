@@ -202,8 +202,22 @@
         <button @click="openAddModal" class="bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded-xl font-bold text-sm shadow-sm">
             + Thêm user
         </button>
-        <input v-model="searchUser" type="text" placeholder="Tìm tên..." class="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none bg-gray-50">
+        <input v-model="searchUserQuery" type="text" placeholder="Tìm tên..." class="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none bg-gray-50">
     </div>
+</div>
+<div class="flex flex-col md:flex-row gap-4 mb-6">
+    <div class="relative flex-1">
+        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+        <input v-model="searchUserQuery" type="text" placeholder="Tìm tên tài khoản..." 
+               class="w-full pl-12 pr-4 py-3 rounded-2xl border border-gray-100 focus:border-blue-500 outline-none transition-all">
+    </div>
+    
+    <select v-model="filterRole" class="px-6 py-3 rounded-2xl border border-gray-100 font-bold text-gray-600 outline-none focus:border-blue-500 cursor-pointer">
+        <option value="all">Tất cả vai trò</option>
+        <option value="student">Học sinh</option>
+        <option value="teacher">Giáo viên</option>
+        <option value="admin">Quản trị viên</option>
+    </select>
 </div>
 <div v-if="showEditModal" class="fixed inset-0 z-[150] flex items-center justify-center p-4 modal-overlay animate-fadeIn">
     <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 border border-gray-100">
@@ -259,35 +273,116 @@
         </div>
     </div>
 </div>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left">
-                                <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
-                                    <tr>
-                                        <th class="px-6 py-4 font-bold">Người dùng</th>
-                                        <th class="px-6 py-4 font-bold">Mật khẩu</th>
-                                        <th class="px-6 py-4 font-bold text-center">Vai trò</th>
-                                        <th class="px-6 py-4 font-bold text-right">Thao tác</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-gray-100">
-                                    <tr v-for="user in filteredUsers" :key="user.id" class="hover:bg-gray-50">
-                                        <td class="px-6 py-4 font-medium">{{ user.name }}</td>
-                                        <td class="px-6 py-4 text-gray-400 font-mono text-xs">{{ user.password }}</td>
-                                        <td class="px-6 py-4 text-center">
-                                            <select @change="updateUserRole(user, $event.target.value)" class="text-xs font-bold px-2 py-1 rounded-lg border-none focus:ring-0 cursor-pointer" :class="getRoleBadgeClass(user.role)">
-                                                <option value="student" :selected="user.role === 'student'">Học sinh</option>
-                                                <option value="teacher" :selected="user.role === 'teacher'">Giáo viên</option>
-                                                <option value="admin" :selected="user.role === 'admin'">Admin</option>
-                                            </select>
-                                        </td>
-                                        <td class="px-6 py-4 text-right">
-                                            <button @click="openEditModal(user)" class="text-blue-500 hover:text-blue-700 font-medium p-2">Sửa</button>
-                                            <button @click="deleteUser(user.id)" v-if="user.name !== 'admin'" class="text-red-500 hover:text-red-700 font-medium p-2">Xóa</button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
+
+<div class="overflow-x-auto">
+    <div v-if="selectedUsers.length > 0" class="bg-red-50 p-4 flex justify-between items-center border-b border-red-100 animate-fadeIn">
+        <span class="text-red-700 font-bold text-sm">Đang chọn {{ selectedUsers.length }} tài khoản</span>
+        <button @click="showBulkDeleteConfirm = true" class="bg-red-600 text-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-red-700 transition shadow-lg shadow-red-200">
+            🗑️ Xóa mục đã chọn
+        </button>
+    </div>
+
+    <table class="w-full text-left">
+        <thead class="bg-gray-50 text-gray-500 text-[10px] uppercase tracking-widest">
+            <tr>
+                <th class="px-6 py-4 w-10">
+                    <input type="checkbox" @change="toggleSelectAll" :checked="selectedUsers.length === filteredUsers.length && filteredUsers.length > 0" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                </th>
+                <th class="px-4 py-4 font-black">STT</th>
+                <th class="px-6 py-4 font-black">Người dùng</th>
+                <th class="px-6 py-4 font-black">Mật khẩu</th>
+                <th class="px-6 py-4 font-black text-center">Vai trò</th>
+                <th class="px-6 py-4 font-black text-right">Thao tác</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+<tr v-for="(user, index) in paginatedUsers" :key="user.id" 
+    class="hover:bg-gray-50 transition-colors" 
+    :class="selectedUsers.includes(user.id) ? 'bg-blue-50/50' : ''">
+    
+    <td class="px-6 py-4">
+        <input v-if="user.name !== 'admin'" 
+               type="checkbox" 
+               :value="user.id" 
+               v-model="selectedUsers" 
+               class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+    </td>
+
+    <td class="px-4 py-4 text-xs font-bold text-gray-400">
+        {{ (currentPage - 1) * itemsPerPage + index + 1 }}
+    </td>
+
+    <td class="px-6 py-4">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-gray-200 to-gray-100 flex items-center justify-center text-[10px] font-black text-gray-500 shadow-sm">
+                {{ user.name.charAt(0).toUpperCase() }}
+            </div>
+            <div class="font-bold text-gray-800">{{ user.name }}</div>
+        </div>
+    </td>
+
+    <td class="px-6 py-4 text-gray-400 font-mono text-[10px] tracking-tight">
+        {{ user.password }}
+    </td>
+
+    <td class="px-6 py-4 text-center">
+        <span :class="getRoleBadgeClass(user.role)" 
+              class="px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border">
+            {{ getRoleName(user.role) }}
+        </span>
+    </td>
+
+    <td class="px-6 py-4 text-right">
+        <div class="flex justify-end gap-1">
+            <button @click="openEditModal(user)" 
+                    class="p-2 text-blue-600 hover:bg-blue-100 rounded-xl transition-all shadow-sm bg-white border border-gray-100" 
+                    title="Chỉnh sửa">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+            </button>
+            
+            <button v-if="user.name !== 'admin'" 
+                    @click="deleteUser(user)" 
+                    class="p-2 text-red-600 hover:bg-red-100 rounded-xl transition-all shadow-sm bg-white border border-gray-100" 
+                    title="Xóa tài khoản">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+            </button>
+        </div>
+    </td>
+</tr>
+        </tbody>
+    </table>
+    <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+    <span class="text-xs font-bold text-gray-500">
+        Hiển thị {{ paginatedUsers.length }} / {{ filteredUsers.length }} tài khoản
+    </span>
+    
+    <div class="flex items-center gap-2">
+        <button @click="currentPage--" :disabled="currentPage === 1" 
+                class="p-2 rounded-lg hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+            ⬅️
+        </button>
+        
+        <div class="flex items-center gap-1">
+            <template v-for="p in totalPages" :key="p">
+                <button @click="currentPage = p" 
+                        :class="currentPage === p ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-white text-gray-600'"
+                        class="w-8 h-8 rounded-lg text-xs font-black transition-all">
+                    {{ p }}
+                </button>
+            </template>
+        </div>
+
+        <button @click="currentPage++" :disabled="currentPage === totalPages" 
+                class="p-2 rounded-lg hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+            ➡️
+        </button>
+    </div>
+</div>
+</div>
                     </div>
                 </div>
 
@@ -1316,103 +1411,199 @@
                         </div>
                     </div>
                 </div>
-                <div v-if="showPrintModal" class="fixed inset-0 z-[200] bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+                <div v-if="showDeleteConfirm" class="fixed inset-0 z-[200] flex items-center justify-center p-4 modal-overlay animate-fadeIn">
+    <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm overflow-hidden border border-red-50">
+        <div class="bg-red-50 py-8 flex justify-center">
+            <div class="bg-red-100 p-4 rounded-full animate-bounce">
+                <svg class="w-12 h-12 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+            </div>
+        </div>
+
+        <div class="p-8 text-center">
+            <h3 class="text-2xl font-black text-gray-900 mb-2">Xác nhận xóa?</h3>
+            <p class="text-gray-500 text-sm leading-relaxed">
+                Bạn đang thực hiện xóa tài khoản <span class="font-bold text-red-600">"{{ userToDelete?.name }}"</span>. 
+                Hành động này <span class="underline">không thể</span> hoàn tác và mọi dữ liệu liên quan sẽ bị mất.
+            </p>
+        </div>
+
+        <div class="px-8 pb-8 flex flex-col gap-3">
+            <button @click="confirmDeleteUser" 
+                    class="w-full py-4 bg-red-600 hover:bg-red-700 text-white font-black rounded-2xl shadow-lg shadow-red-200 transition-all active:scale-95">
+                XÁC NHẬN XÓA NGAY
+            </button>
+            <button @click="showDeleteConfirm = false" 
+                    class="w-full py-4 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold rounded-2xl transition-all">
+                Hủy bỏ
+            </button>
+        </div>
+    </div>
+</div>
+<div v-if="showBulkDeleteConfirm" class="fixed inset-0 z-[200] flex items-center justify-center p-4 modal-overlay animate-fadeIn">
+    <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm overflow-hidden border border-red-50">
+        <div class="bg-red-600 py-8 flex justify-center text-white">
+            <span class="text-5xl">⚠️</span>
+        </div>
+        <div class="p-8 text-center">
+            <h3 class="text-2xl font-black text-gray-900 mb-2">Xóa {{ selectedUsers.length }} tài khoản?</h3>
+            <p class="text-gray-500 text-sm leading-relaxed">
+                Bạn có chắc chắn muốn xóa tất cả tài khoản đã chọn? Hành động này sẽ xóa vĩnh viễn dữ liệu và không thể khôi phục.
+            </p>
+        </div>
+        <div class="px-8 pb-8 flex flex-col gap-3">
+            <button @click="confirmBulkDelete" class="w-full py-4 bg-red-600 text-white font-black rounded-2xl hover:bg-red-700 shadow-lg transition-all">
+                ĐỒNG Ý XÓA TẤT CẢ
+            </button>
+            <button @click="showBulkDeleteConfirm = false" class="w-full py-4 bg-gray-100 text-gray-600 font-bold rounded-2xl transition-all">
+                Hủy bỏ
+            </button>
+        </div>
+    </div>
+</div>
+<div v-if="showPrintModal" class="fixed inset-0 z-[200] bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl w-full max-w-5xl h-[95vh] flex flex-col overflow-hidden shadow-2xl">
         <div class="p-4 border-b flex justify-between items-center bg-gray-50">
-            <h3 class="font-black text-gray-800">🛠 CHỈNH SỬA & IN PHIẾU KẾT QUẢ</h3>
+            <div class="flex items-center gap-3">
+                <span class="text-2xl">🖨️</span>
+                <div>
+                    <h3 class="font-black text-gray-800 leading-none">XUẤT PHIẾU KẾT QUẢ CHI TIẾT</h3>
+                    <p class="text-[10px] text-gray-500 font-bold uppercase mt-1">Chuẩn hóa dữ liệu EduPro v4.0</p>
+                </div>
+            </div>
             <div class="flex gap-2">
-                <button @click="exportToPDF" class="bg-blue-600 text-white px-6 py-2 rounded-xl font-bold">Xuất File PDF</button>
-                <button @click="showPrintModal = false" class="bg-gray-200 px-4 py-2 rounded-xl font-bold">Đóng</button>
+                <button @click="exportToPDF" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-blue-200">
+                    <span>💾</span> Tải File PDF
+                </button>
+                <button @click="showPrintModal = false" class="bg-gray-200 hover:bg-gray-300 px-4 py-2.5 rounded-xl font-bold transition-all">Đóng</button>
             </div>
         </div>
 
-        <div class="flex-1 overflow-y-auto p-8 bg-gray-200 flex justify-center">
-<div id="printable-sheet" class="bg-white w-[210mm] mx-auto text-black font-serif print-container">
-    
-    <div class="print-page p-[12mm] border-[1.5px] border-black min-h-[296mm] flex flex-col relative mb-[5mm]">
-        <div class="flex justify-between items-start mb-6">
-            <div class="text-left text-[11px] uppercase font-bold">
-                <p>Sở GD&ĐT Lâm Đồng</p>
-                <p>Trường THPT Yersin Đà Lạt</p>
-            </div>
-            <div class="text-center">
-                <h1 class="text-xl font-black uppercase">Phiếu Kết Quả Học Tập</h1>
-                <p class="text-[10px] italic">Dựa trên mẫu Phiếu trả lời trắc nghiệm năm 2025</p>
-            </div>
-            <div class="w-[80px] h-[80px] border border-black flex items-center justify-center text-[10px] text-center p-1">
-                Ảnh/QR<br>Kết quả
-            </div>
-        </div>
-
-        <div class="border-2 border-black p-3 mb-6 grid grid-cols-2 gap-4">
-            <div class="space-y-2">
-                <p class="text-sm">Họ và tên thí sinh: <span class="font-bold border-b border-black inline-block min-w-[200px]">{{ printData.studentName }}</span></p>
-                <p class="text-sm">Ngày nộp bài: <span class="border-b border-black">{{ printData.submittedAt }}</span></p>
-            </div>
-            <div class="text-right flex flex-col justify-center items-end">
-                <div class="border-2 border-red-600 p-2 rounded">
-                    <span class="text-xs font-bold text-red-600 uppercase">Điểm số:</span>
-                    <span class="text-2xl font-black text-red-600 ml-2">{{ printData.score }}</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="mb-6">
-            <div class="bg-gray-200 font-bold text-[11px] px-2 py-1 mb-3 uppercase border-l-4 border-black">Phần I: Câu hỏi trắc nghiệm nhiều lựa chọn</div>
-            <div class="grid grid-cols-4 gap-x-4 gap-y-1.5">
-                <div v-for="(q, idx) in printData.questions.filter(x => x.type === 'mc')" :key="idx" class="flex items-center gap-1.5 border-b border-gray-100 pb-1">
-                    <span class="w-5 font-bold text-[10px]">{{ idx + 1 }}</span>
-                    <div class="flex gap-1">
-                        <span v-for="o in 4" 
-                              :class="printData.studentAnswersLog[idx].choice === (o-1) ? 'bg-black text-white' : 'border-black text-black'"
-                              class="w-4 h-4 rounded-full border flex items-center justify-center text-[8px] font-bold">
-                            {{ String.fromCharCode(64 + o) }}
-                        </span>
+        <div class="flex-1 overflow-y-auto p-8 bg-gray-500/10 flex justify-center custom-scrollbar">
+            <div id="printable-sheet" class="bg-white w-[210mm] min-h-[297mm] shadow-2xl mx-auto text-black font-serif print-container">
+                
+                <div class="print-page p-[15mm] relative">
+                    <div class="flex justify-between items-start mb-8 border-b-2 border-black pb-4">
+                        <div class="text-center w-1/3 uppercase font-bold text-[11px]">
+                            <p>SỞ GD&ĐT LÂM ĐỒNG</p>
+                            <p class="border-b border-black inline-block pb-0.5">Trường THPT Yersin Đà Lạt</p>
+                        </div>
+                        <div class="text-center w-1/3">
+                            <h1 class="text-xl font-black uppercase leading-tight">PHIẾU KẾT QUẢ<br>BÀI KIỂM TRA</h1>
+                            <p class="text-[10px] italic mt-1">(Mẫu bóc tách dữ liệu điện tử 2026)</p>
+                        </div>
+                        <div class="w-[80px] h-[80px] border-2 border-black flex flex-col items-center justify-center text-[9px] font-bold p-1">
+                            <span class="mb-1">ĐIỂM SỐ</span>
+                            <span class="text-3xl font-black text-red-600">{{ printData.score }}</span>
+                        </div>
                     </div>
-                </div>
-            </div>
-        </div>
 
-        <div class="mb-6">
-            <div class="bg-gray-200 font-bold text-[11px] px-2 py-1 mb-3 uppercase border-l-4 border-black">Phần II: Câu hỏi trắc nghiệm Đúng/Sai</div>
-            <div class="grid grid-cols-2 gap-x-6 gap-y-2">
-                <div v-for="(q, idx) in printData.questions.filter(x => x.type === 'tf')" :key="idx" class="border border-black p-1.5 rounded flex items-center justify-between">
-                    <div class="font-bold text-[10px]">Câu {{ idx + 1 }}</div>
-                    <div class="flex gap-3">
-                        <div v-for="ansIdx in 4" class="flex items-center gap-1">
-                            <span class="text-[9px]">{{ String.fromCharCode(96 + ansIdx) }}</span>
-                            <div class="flex flex-col gap-0.5">
-                                <span :class="printData.studentAnswersLog[idx + printData.questions.filter(x=>x.type==='mc').length].choice[ansIdx-1] === true ? 'bg-black text-white' : 'border-black'" class="w-3 h-3 border text-[7px] flex items-center justify-center">Đ</span>
-                                <span :class="printData.studentAnswersLog[idx + printData.questions.filter(x=>x.type==='mc').length].choice[ansIdx-1] === false ? 'bg-black text-white' : 'border-black'" class="w-3 h-3 border text-[7px] flex items-center justify-center">S</span>
+                    <div class="grid grid-cols-2 gap-6 mb-8 text-sm">
+                        <div class="space-y-2">
+                            <p>Họ tên thí sinh: <span class="font-bold uppercase ml-2">{{ printData.studentName }}</span></p>
+                            <p>Tên bài thi: <span class="font-medium ml-2">{{ printData.examTitle }}</span></p>
+                        </div>
+                        <div class="space-y-2">
+                            <p>Thời gian nộp: <span class="ml-2">{{ printData.submittedAt }}</span></p>
+                            <p>Số lần vi phạm: <span class="ml-2 font-bold" :class="printData.cheats > 0 ? 'text-red-600' : ''">{{ printData.cheats }} lần</span></p>
+                        </div>
+                    </div>
+
+                    <div class="mb-10">
+                        <div class="bg-gray-100 font-bold text-[12px] px-3 py-1.5 mb-4 uppercase border-l-8 border-black flex justify-between">
+                            <span>Phần I: Câu hỏi trắc nghiệm (Nhiều lựa chọn)</span>
+                            <span class="text-[10px]">Ký hiệu: ● HS Chọn | ⭕ Đáp án đúng</span>
+                        </div>
+                        <div class="grid grid-cols-4 gap-x-6 gap-y-3">
+                            <div v-for="(q, idx) in printData.questions.filter(x => x.type === 'mc')" :key="idx" 
+                                 class="flex items-center gap-2 border-b border-gray-100 pb-1">
+                                <span class="w-6 font-bold text-xs">{{ idx + 1 }}.</span>
+                                <div class="flex gap-1.5">
+                                    <div v-for="o in 4" class="relative">
+                                        <div v-if="q.correct === (o-1)" class="absolute -inset-0.5 border border-green-500 rounded-full animate-pulse"></div>
+                                        <span :class="[
+                                            printData.studentAnswersLog[idx].choice === (o-1) ? 'bg-black text-white' : 'border-black text-black',
+                                            (printData.studentAnswersLog[idx].choice === (o-1) && q.correct !== (o-1)) ? 'bg-red-500 border-red-500' : ''
+                                        ]"
+                                        class="w-5 h-5 rounded-full border flex items-center justify-center text-[9px] font-bold z-10 relative">
+                                            {{ String.fromCharCode(65 + o - 1) }}
+                                        </span>
+                                    </div>
+                                </div>
+                                <span v-if="printData.studentAnswersLog[idx].choice === q.correct" class="text-green-600 font-bold text-[10px]">✓</span>
+                                <span v-else class="text-red-500 font-bold text-[10px]">✗</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-10">
+                        <div class="bg-gray-100 font-bold text-[12px] px-3 py-1.5 mb-4 uppercase border-l-8 border-black">Phần II: Câu hỏi trắc nghiệm Đúng/Sai</div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div v-for="(q, idx) in printData.questions.filter(x => x.type === 'tf')" :key="idx" 
+                                 class="border border-black p-2 rounded-lg flex flex-col gap-2">
+                                <div class="font-bold text-[11px] flex justify-between">
+                                    <span>Câu {{ idx + 1 }}</span>
+                                    <span class="text-[9px] text-gray-500 font-normal italic">Kết quả: {{ getTfScore(idx, q) }}đ</span>
+                                </div>
+                                <div class="grid grid-cols-4 gap-2">
+                                    <div v-for="aIdx in 4" class="flex flex-col items-center gap-1 border-r border-gray-100 last:border-0">
+                                        <span class="text-[10px] font-bold">{{ String.fromCharCode(97 + aIdx - 1) }})</span>
+                                        <div class="flex flex-col gap-1">
+                                            <div :class="[
+                                                printData.studentAnswersLog[idx + getOffset('mc')].choice[aIdx-1] === true ? 'bg-black text-white' : 'border-black',
+                                                (q.correct[aIdx-1] === true) ? 'ring-1 ring-green-500 ring-offset-1' : ''
+                                            ]" class="w-4 h-4 border text-[8px] flex items-center justify-center font-bold">Đ</div>
+                                            <div :class="[
+                                                printData.studentAnswersLog[idx + getOffset('mc')].choice[aIdx-1] === false ? 'bg-black text-white' : 'border-black',
+                                                (q.correct[aIdx-1] === false) ? 'ring-1 ring-green-500 ring-offset-1' : ''
+                                            ]" class="w-4 h-4 border text-[8px] flex items-center justify-center font-bold">S</div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
 
-    <div class="print-page p-[12mm] border-[1.5px] border-black min-h-[296mm] flex flex-col">
-        <div class="bg-gray-800 text-white font-bold text-center py-2 mb-6 uppercase tracking-widest">Phần III: Trả lời ngắn & Tự luận</div>
-        
-        <div v-for="(ans, aIdx) in printData.studentAnswersLog" :key="aIdx">
-            <div v-if="printData.questions[aIdx].type === 'sa' || printData.questions[aIdx].type === 'essay'" class="mb-8">
-                <div class="flex items-center gap-2 mb-2">
-                    <span class="bg-black text-white px-3 py-1 font-bold text-sm">CÂU {{ aIdx + 1 }}</span>
-                    <span class="text-sm font-medium">{{ printData.questions[aIdx].text }}</span>
-                </div>
-                <div class="bg-lines-2025 p-4 min-h-[250px] border border-gray-300 relative shadow-inner">
-                     <div class="whitespace-pre-wrap font-serif text-blue-900 leading-[28px] italic text-[14px]">
-                         {{ ans.text }}
-                     </div>
+                <div class="print-page p-[15mm] border-t-2 border-dashed border-gray-300 min-h-[297mm]">
+                    <div class="bg-black text-white font-bold text-center py-2 mb-8 uppercase tracking-widest text-sm">Phần III & IV: Tự luận & Trả lời ngắn</div>
+                    
+                    <div v-for="(ans, aIdx) in printData.studentAnswersLog" :key="aIdx">
+                        <div v-if="printData.questions[aIdx].type === 'sa' || printData.questions[aIdx].type === 'essay'" class="mb-10">
+                            <div class="flex items-start gap-3 mb-3">
+                                <span class="bg-black text-white px-3 py-1 font-bold text-sm shrink-0">CÂU {{ aIdx + 1 }}</span>
+                                <div class="text-sm font-bold leading-tight" v-html="printData.questions[aIdx].text"></div>
+                            </div>
+                            <div class="bg-lines-2025 p-6 min-h-[200px] border-2 border-black rounded-br-[3rem] relative shadow-inner mb-4">
+                                <div class="whitespace-pre-wrap font-serif text-blue-900 leading-[28px] italic text-[15px]">
+                                    {{ ans.text || '--- Học sinh không điền nội dung trả lời ---' }}
+                                </div>
+                            </div>
+                            <div class="flex gap-4">
+                                <div class="flex-1 border border-dashed border-gray-400 p-3 rounded-xl text-[11px] italic text-gray-500">
+                                    <b>Nhận xét của GV:</b> {{ ans.feedback || '......................................................................................' }}
+                                </div>
+                                <div class="w-32 border-2 border-black p-2 text-center flex flex-col justify-center">
+                                    <span class="text-[9px] font-bold uppercase">Điểm câu</span>
+                                    <span class="text-xl font-black">{{ ans.score || '...' }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-auto flex justify-between items-end pt-10 border-t border-black">
+                        <div class="text-center w-1/3">
+                            <p class="text-xs font-bold uppercase">Phụ huynh học sinh</p>
+                            <p class="text-[10px] italic mt-12">(Ký và ghi rõ họ tên)</p>
+                        </div>
+                        <div class="text-center w-1/3">
+                            <p class="text-xs font-bold uppercase">Giáo viên bộ môn</p>
+                            <p class="text-[10px] italic mt-12">(Ký và ghi rõ họ tên)</p>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
-        <div class="mt-auto text-center border-t border-black pt-4 italic text-[10px]">
-            Hết bài làm của học sinh - Kết quả được xác thực bởi EduPro v4.0
-        </div>
-    </div>
-</div>
         </div>
     </div>
 </div>
