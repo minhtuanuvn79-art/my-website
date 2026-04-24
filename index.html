@@ -143,31 +143,46 @@
         </div>
 
         <div v-else>
-            <nav class="bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200 px-4 py-3 mb-6 sticky top-0 z-40">
+<nav class="bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200 px-4 py-3 mb-6 sticky top-0 z-40">
     <div class="max-w-7xl mx-auto flex justify-between items-center">
-        <div class="flex items-center space-x-3 cursor-pointer" @click="goHome">
-            <div class="bg-blue-600 p-2 rounded-lg text-white shadow-lg shadow-blue-100">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+        <div class="flex items-center space-x-3 cursor-pointer group" @click="goHome">
+            <div class="bg-blue-600 p-2 rounded-xl group-hover:rotate-12 transition-transform duration-300">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
                 </svg>
             </div>
-            <div class="flex flex-col">
-                <span class="text-xl font-black text-gray-800 tracking-tighter leading-none">EduExam</span>
-                <div class="flex items-center gap-1 mt-0.5">
-                    <span class="text-[9px] font-bold text-blue-500 uppercase tracking-widest">Pro System</span>
-                    <span v-if="currentUser?.role === 'admin'" class="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[8px] font-black rounded uppercase">Admin</span>
-                    <span v-if="currentUser?.role === 'teacher'" class="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[8px] font-black rounded uppercase">Giáo viên</span>
-                    
-                </div>
+            <div>
+                <h1 class="text-xl font-black text-gray-900 tracking-tight leading-none">EduPro</h1>
+                <span class="text-[10px] font-bold text-blue-600 uppercase tracking-[0.2em]">Hệ thống thi v4.0</span>
             </div>
         </div>
 
-        <div class="flex items-center space-x-4">
+        <div class="flex items-center space-x-3">
             
-            
-            <button @click="logout" class="group bg-gray-50 hover:bg-red-50 p-2.5 rounded-xl transition-all duration-300 border border-transparent hover:border-red-100" title="Đăng xuất">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400 group-hover:text-red-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            <button v-if="currentUser?.role === 'admin' && view === 'teacher-dash'" 
+                    @click="view = 'admin-dash'" 
+                    class="bg-purple-50 text-purple-700 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider border border-purple-100 hover:bg-purple-600 hover:text-white transition-all duration-300 shadow-sm flex items-center gap-2">
+                <span class="text-base">🛡️</span>
+                <span class="hidden md:inline">Quản trị hệ thống</span>
+            </button>
+
+            <button v-if="currentUser?.role === 'admin' && view === 'admin-dash'" 
+                    @click="view = 'teacher-dash'" 
+                    class="bg-blue-50 text-blue-700 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider border border-blue-100 hover:bg-blue-600 hover:text-white transition-all duration-300 shadow-sm flex items-center gap-2">
+                <span class="text-base">👨‍🏫</span>
+                <span class="hidden md:inline">Giao diện Giáo viên</span>
+            </button>
+
+            <div v-if="currentUser" class="hidden sm:flex flex-col items-end mr-2">
+                <span class="text-xs font-black text-gray-800 leading-none">{{ currentUser.name }}</span>
+                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">{{ currentUser.role === 'admin' ? 'Quản trị viên' : (currentUser.role === 'teacher' ? 'Giáo viên' : 'Học sinh') }}</span>
+            </div>
+
+            <button @click="logout" 
+                    class="group bg-gray-50 hover:bg-red-50 p-2.5 rounded-xl transition-all duration-300 border border-transparent hover:border-red-100" 
+                    title="Đăng xuất">
+                <svg class="w-5 h-5 text-gray-500 group-hover:text-red-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
                 </svg>
             </button>
         </div>
@@ -190,7 +205,33 @@
         <input v-model="searchUser" type="text" placeholder="Tìm tên..." class="px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none bg-gray-50">
     </div>
 </div>
-
+<div v-if="showEditModal" class="fixed inset-0 z-[150] flex items-center justify-center p-4 modal-overlay animate-fadeIn">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 border border-gray-100">
+        <h3 class="text-2xl font-black text-gray-800 mb-6">Chỉnh sửa tài khoản</h3>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Tên người dùng</label>
+                <input v-model="editUserData.name" type="text" class="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-blue-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Mật khẩu mới</label>
+                <input v-model="editUserData.password" type="text" class="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-blue-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Vai trò</label>
+                <select v-model="editUserData.role" class="w-full px-4 py-3 rounded-xl border border-gray-200 font-bold">
+                    <option value="student">Học sinh</option>
+                    <option value="teacher">Giáo viên</option>
+                    <option value="admin">Quản trị viên</option>
+                </select>
+            </div>
+        </div>
+        <div class="flex gap-3 mt-8">
+            <button @click="showEditModal = false" class="flex-1 py-3 font-bold text-gray-500 bg-gray-100 rounded-xl">Hủy</button>
+            <button @click="saveUserEdit" class="flex-1 py-3 font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200">Cập nhật</button>
+        </div>
+    </div>
+</div>
 <div v-if="showAddModal" class="fixed inset-0 z-[150] flex items-center justify-center p-4 modal-overlay animate-fadeIn">
     <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 border border-gray-100">
         <h3 class="text-2xl font-black text-gray-800 mb-6">Tạo tài khoản mới</h3>

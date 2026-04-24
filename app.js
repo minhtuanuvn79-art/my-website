@@ -376,41 +376,60 @@ onMounted(async () => {
         };
 
 const handleLogin = async () => {
-    if (!authForm.value.name.trim() || !authForm.value.password.trim()) 
+    // 1. Kiểm tra tính hợp lệ của đầu vào
+    if (!authForm.value.name.trim() || !authForm.value.password.trim()) {
         return showNotify("Vui lòng nhập tên và mật khẩu", "error");
+    }
     
-    // 1. Kiểm tra tài khoản mặc định trước
-    let user = FIXED_ACCOUNTS.find(u => u.name.toLowerCase() === authForm.value.name.toLowerCase());
+    let user = null;
 
-    // 2. Truy vấn Supabase nếu không phải tài khoản mặc định
-    if (!user) {
-        try {
+    try {
+        // 2. Kiểm tra trong danh sách tài khoản mặc định (FIXED_ACCOUNTS)
+        user = FIXED_ACCOUNTS.find(u => u.name.toLowerCase() === authForm.value.name.toLowerCase());
+
+        // 3. Nếu không phải tài khoản mặc định, truy vấn từ Supabase
+        if (!user) {
             const { data, error } = await supabaseClient
                 .from('users')
-                .select('*') // Bổ sung select('*') để đảm bảo lấy đủ dữ liệu
+                .select('*')
                 .eq('name', authForm.value.name)
-                .maybeSingle(); // Dùng maybeSingle() thay vì single() để tránh lỗi nếu không tìm thấy
+                .maybeSingle();
             
             if (error) throw error;
             user = data;
-        } catch (err) {
-            console.error("Lỗi đăng nhập:", err.message);
-            return showNotify("Lỗi hệ thống khi đăng nhập", "error");
         }
+    } catch (err) {
+        console.error("Lỗi đăng nhập:", err.message);
+        return showNotify("Lỗi kết nối hệ thống. Vui lòng thử lại sau.", "error");
     }
 
-    if (!user) return showNotify("Tài khoản không tồn tại", "error");
-    if (user.password !== authForm.value.password) return showNotify("Mật khẩu không chính xác", "error");
+    // 4. Xác thực tài khoản và mật khẩu
+    if (!user) {
+        return showNotify("Tài khoản không tồn tại trên hệ thống", "error");
+    }
+    
+    if (user.password !== authForm.value.password) {
+        return showNotify("Mật khẩu không chính xác", "error");
+    }
 
+    // 5. Lưu thông tin người dùng vào State và LocalStorage
     currentUser.value = user;
     localStorage.setItem('eduexam_user', JSON.stringify(user));
     
-    view.value = user.role === 'admin' ? 'admin-dash' : user.role === 'teacher' ? 'teacher-dash' : 'student-dash';
-    if(user.role === 'teacher') teacherTab.value = 'exams';
+    // 6. XỬ LÝ PHÂN QUYỀN VÀ ĐIỀU HƯỚNG (Điều chỉnh theo yêu cầu của bạn)
+    // Nếu là Admin hoặc Giáo viên: Mặc định vào trang Dashboard của Giáo viên
+    if (user.role === 'admin' || user.role === 'teacher') {
+        view.value = 'teacher-dash';
+        teacherTab.value = 'exams'; // Mặc định mở tab quản lý đề thi
+    } else {
+        // Nếu là Học sinh: Vào trang Dashboard của học sinh
+        view.value = 'student-dash';
+    }
     
-    showNotify(`Chào mừng ${user.name}!`);
+    // 7. Thông báo và khởi tạo các dịch vụ thời gian thực
+    showNotify(`Chào mừng ${user.name} đã quay trở lại!`);
     
-    // Sau khi đăng nhập thành công, khởi tạo Realtime
+    // Kích hoạt lắng nghe thay đổi đề thi từ Cloud
     subscribeToExamChanges();
 };
 
@@ -429,31 +448,73 @@ const logout = () => {
     showNotify("Đã đăng xuất!");
 };
 
-        const goHome = () => {
-    if (view.value === 'exam-room' && !confirm("Rời khỏi phòng thi? Tiến trình sẽ không được lưu nếu chưa nộp bài.")) return;
+const goHome = () => {
+    if (view.value === 'exam-room' && !confirm("Rời khỏi phòng thi?")) return;
     
-    // Reset dữ liệu thi để tránh lỗi title khi quay lại dash
     currentExam.value = null; 
-    
     if (view.value === 'presentation') exitPresentation();
-    if (timerInterval.value) clearInterval(timerInterval.value);
     
-    // Sử dụng dấu ? để tránh lỗi khi F5 mà currentUser chưa kịp load
-    view.value = currentUser.value?.role === 'admin' ? 'admin-dash' : currentUser.value?.role === 'teacher' ? 'teacher-dash' : 'student-dash';
+    // SỬA TẠI ĐÂY: Admin bấm Home sẽ về Teacher Dash
+    if (currentUser.value?.role === 'admin' || currentUser.value?.role === 'teacher') {
+        view.value = 'teacher-dash';
+    } else {
+        view.value = 'student-dash';
+    }
 };
 
-        const filteredUsers = computed(() => searchUser.value ? users.value.filter(u => u.name.toLowerCase().includes(searchUser.value.toLowerCase())) : users.value);
-        const deleteUser = async (id) => { 
-            if (confirm("Xóa tài khoản này?")) { const { error } = await supabaseClient.from('users').delete().eq('id', id); if (!error) { users.value = users.value.filter(u => u.id !== id); showNotify("Đã xóa tài khoản."); } }
-        };
-        const updateUserRole = async (user, newRole) => { 
-            const { error } = await supabaseClient.from('users').update({ role: newRole }).eq('id', user.id); if (!error) { user.role = newRole; showNotify("Cập nhật quyền thành công."); }
-        };
-        const openEditModal = (user) => { editUserData.value = { ...user }; showEditModal.value = true; };
-        const saveUserEdit = async () => {
-            const { error } = await supabaseClient.from('users').update({ name: editUserData.value.name, password: editUserData.value.password, role: editUserData.value.role }).eq('id', editUserData.value.id);
-            if (!error) { const idx = users.value.findIndex(u => u.id === editUserData.value.id); if (idx !== -1) users.value[idx] = { ...editUserData.value }; showEditModal.value = false; showNotify("Đã lưu thông tin."); }
-        };
+const filteredUsers = computed(() => searchUser.value ? users.value.filter(u => u.name.toLowerCase().includes(searchUser.value.toLowerCase())) : users.value);
+const deleteUser = (user) => { 
+    if (user.name === 'admin') return showNotify("Không thể xóa tài khoản Admin hệ thống!", "error");
+    userToDelete.value = user;
+    showDeleteConfirm.value = true; 
+};
+const confirmDeleteUser = async () => {
+    if (!userToDelete.value) return;
+    
+    try {
+        const { error } = await supabaseClient
+            .from('users')
+            .delete()
+            .eq('id', userToDelete.value.id);
+
+        if (!error) { 
+            users.value = users.value.filter(u => u.id !== userToDelete.value.id); 
+            showNotify(`Đã xóa tài khoản "${userToDelete.value.name}"`); 
+            showDeleteConfirm.value = false;
+            userToDelete.value = null;
+        } else {
+            showNotify("Lỗi xóa: " + error.message, "error");
+        }
+    } catch (err) {
+        showNotify("Lỗi hệ thống", "error");
+    }
+};
+const updateUserRole = async (user, newRole) => { 
+    const { error } = await supabaseClient.from('users').update({ role: newRole }).eq('id', user.id); if (!error) { user.role = newRole; showNotify("Cập nhật quyền thành công."); }
+};
+const openEditModal = (user) => { 
+    editUserData.value = { ...user }; // Sao chép dữ liệu để tránh sửa trực tiếp vào mảng gốc khi chưa nhấn Lưu
+    showEditModal.value = true; 
+};
+const saveUserEdit = async () => {
+    const { error } = await supabaseClient
+        .from('users')
+        .update({ 
+            name: editUserData.value.name, 
+            password: editUserData.value.password, 
+            role: editUserData.value.role 
+        })
+        .eq('id', editUserData.value.id);
+
+    if (!error) { 
+        const idx = users.value.findIndex(u => u.id === editUserData.value.id); 
+        if (idx !== -1) users.value[idx] = { ...editUserData.value }; 
+        showEditModal.value = false; 
+        showNotify("Đã lưu thông tin thành công."); 
+    } else {
+        showNotify("Lỗi cập nhật: " + error.message, "error");
+    }
+};
 
         // ==========================================
         // QUẢN LÝ ĐỀ THI, TRÌNH CHIẾU & PHÒNG THI 4.0
@@ -1434,7 +1495,11 @@ const exportToPDF = () => {
     };
     html2pdf().set(opt).from(element).save();
 };
-
+// Thêm vào cùng nhóm với các ref khác như users, exams...
+const showEditModal = ref(false);
+const editUserData = ref({ id: null, name: '', password: '', role: 'student' });
+const showDeleteConfirm = ref(false);
+const userToDelete = ref(null);
 return {
     exportToPDF,
     openPrintPreview,
@@ -1488,6 +1553,8 @@ return {
             deleteUser, 
             updateUserRole, 
             filteredUsers, 
+            showEditModal,
+            editUserData,
             openEditModal, 
             saveUserEdit, 
             openAddModal, 
