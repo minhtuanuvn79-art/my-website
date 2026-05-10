@@ -400,9 +400,6 @@
                         <button @click="teacherTab = 'ai-creator'" :class="teacherTab === 'ai-creator' ? 'bg-purple-600 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'" class="px-5 py-2.5 rounded-xl font-bold transition flex items-center gap-2">
                             <span>🧠</span> AI Soạn Đề
                         </button>
-                        <button @click="teacherTab = 'monitor'" :class="teacherTab === 'monitor' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'" class="px-5 py-2.5 rounded-xl font-bold transition flex items-center gap-2">
-                            <span>📈</span> Phòng thi 4.0
-                        </button>
                     </div>
 
 <div v-if="teacherTab === 'exams'" class="animate-fadeIn space-y-6">
@@ -555,107 +552,6 @@
                             </div>
                         </div>
                     </div>
-
-<div v-if="teacherTab === 'monitor'" class="animate-fadeIn space-y-8">
-    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-            <h3 class="text-2xl font-black text-gray-800">Trung tâm Giám sát Real-time</h3>
-            <p class="text-gray-500 text-sm font-medium">Theo dõi trạng thái làm bài trên toàn hệ thống.</p>
-        </div>
-        
-        <div v-if="!isMonitoring" class="w-full md:w-96 relative">
-            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
-            <input v-model="searchMonitor" type="text" placeholder="Tìm tên đề hoặc giáo viên..." 
-                   class="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm font-medium">
-        </div>
-    </div>
-
-    <div v-if="!isMonitoring" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div v-for="exam in filteredExamsForMonitor" :key="exam.id" @click="startMonitoring(exam)"
-             class="bg-white p-6 rounded-[2rem] border-2 border-gray-100 hover:border-indigo-500 hover:shadow-xl transition-all cursor-pointer group relative overflow-hidden">
-            <div class="mb-3">
-                <span class="bg-gray-100 text-gray-600 text-[10px] px-2.5 py-1 rounded-full font-black uppercase tracking-wider border border-gray-200">
-                    👤 GV: {{ exam.creator || 'Hệ thống' }}
-                </span>
-            </div>
-            <h4 class="text-lg font-black text-gray-800 mb-4 line-clamp-1 group-hover:text-indigo-600">{{ exam.title }}</h4>
-            <div class="grid grid-cols-2 gap-3 mb-6">
-                <div class="bg-gray-50 p-3 rounded-2xl border border-gray-100">
-                    <span class="text-[10px] font-black text-gray-400 uppercase block mb-1">Tổng bài nộp</span>
-                    <span class="text-xl font-black text-gray-700">{{ allResults.filter(r => r.examId === exam.id).length }}</span>
-                </div>
-                <div class="bg-indigo-50 p-3 rounded-2xl border border-indigo-100">
-                    <span class="text-[10px] font-black text-indigo-400 uppercase block mb-1">Mã Code</span>
-                    <span class="text-xl font-black text-indigo-600">{{ exam.examCode }}</span>
-                </div>
-            </div>
-            <button class="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm group-hover:bg-indigo-600 transition-colors">Vào giám sát ➔</button>
-        </div>
-    </div>
-
-    <div v-else class="animate-fadeIn space-y-6">
-        <div class="bg-white p-6 rounded-[2rem] border border-gray-200 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
-            <div class="flex items-center gap-4">
-                <button @click="isMonitoring = false" class="p-3 bg-gray-100 hover:bg-gray-200 rounded-xl transition">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7" /></svg>
-                </button>
-                <div>
-                    <span class="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Đang giám sát đề:</span>
-                    <h3 class="text-xl font-black text-gray-800">{{ currentExam?.title }}</h3>
-                </div>
-            </div>
-            <div class="flex items-center gap-6">
-                <div class="text-center">
-                    <span class="text-[10px] font-black text-gray-400 uppercase block">Đang online</span>
-                    <span class="text-2xl font-black text-blue-600">{{ Object.keys(activeStudents).length }}</span>
-                </div>
-                <div class="w-px h-10 bg-gray-200"></div>
-                <div class="text-center">
-                    <span class="text-[10px] font-black text-gray-400 uppercase block">Vi phạm</span>
-                    <span class="text-2xl font-black text-red-600">{{ Object.values(activeStudents).filter(s => s.cheats > 0).length }}</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-<div v-for="(student, name) in activeStudents" :key="name" 
-     class="bg-white p-6 rounded-[2rem] border-2 transition-all"
-     :class="student.cheats >= 3 ? 'border-red-500 bg-red-50' : 'border-gray-100'">
-    
-    <div class="flex justify-between items-start mb-4">
-        <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-gray-900 text-white flex items-center justify-center font-black">
-                {{ name.charAt(0).toUpperCase() }}
-            </div>
-            <span class="font-black text-gray-800">{{ name }}</span>
-        </div>
-    </div>
-
-<div class="space-y-3">
-    <div class="flex justify-between items-end mb-1">
-        <span class="text-gray-400 text-[10px] uppercase tracking-wider font-bold">Hoàn thành</span>
-        <span class="text-blue-600 font-black text-lg leading-none">{{ student.percent || 0 }}%</span>
-    </div>
-    
-    <div class="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden shadow-inner relative">
-        <div :class="student.percent === 100 ? 'bg-gradient-to-r from-green-400 to-green-600' : 'bg-gradient-to-r from-blue-500 to-indigo-600'" 
-             class="h-full transition-all duration-1000 ease-out" 
-             :style="{ width: (student.percent || 0) + '%' }">
-        </div>
-    </div>
-    
-    <p class="text-[10px] font-bold text-gray-500 text-right">
-        Đã làm: {{ student.progress || 0 }}/{{ student.total || 0 }} câu
-    </p>
-</div>
-</div>
-            
-            <div v-if="Object.keys(activeStudents).length === 0" class="col-span-full py-12 text-center text-gray-400 font-bold border-2 border-dashed rounded-[2rem]">
-                Đang chờ học sinh vào phòng thi...
-            </div>
-        </div>
-    </div>
-</div>
                 </div>
 
                 <div v-if="view === 'create-exam'" class="animate-fadeIn max-w-4xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-gray-100 mt-6">
@@ -879,7 +775,7 @@
         </div>
     </div>
 
-<div class="fixed top-20 right-4 md:top-24 md:right-6 z-[110] pointer-events-none md:pointer-events-auto">
+<div class="fixed top-20 right-4 md:top-24 md:right-6 z-[110] pointer-events-none md:pointer-events-auto lg:hidden" >
     <div :class="timeLeft < 300 ? 'bg-red-600 border-red-400 shadow-red-200' : 'bg-gray-900/95 border-gray-700 shadow-blue-900/20'" 
          class="flex flex-col items-center p-1.5 px-3 md:p-2 md:px-4 rounded-xl border-2 shadow-xl transition-all duration-500 hover:scale-105 backdrop-blur-sm">
         <span class="text-[7px] md:text-[8px] font-black text-white/60 uppercase tracking-widest mb-0.5">Thời gian</span>
@@ -943,35 +839,48 @@
             </template>
         </div>
 
+<button @click="showMobileQuestionMap = true" 
+        class="lg:hidden fixed bottom-6 right-6 z-[120] bg-blue-600 text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center border-2 border-white animate-bounce">
+    <span class="text-xl">📋</span>
+</button>
+
 <div class="w-full lg:w-80 shrink-0 order-last">
-    
-    <div class="fixed bottom-0 left-0 right-0 z-[100] lg:static bg-white p-4 lg:p-6 rounded-t-3xl lg:rounded-[2.5rem] border-t lg:border border-gray-200 shadow-[0_-15px_40px_rgba(0,0,0,0.1)] lg:shadow-xl flex flex-col max-h-[45vh] lg:max-h-[calc(100vh-100px)] transition-transform">
+    <div v-if="showMobileQuestionMap" @click="showMobileQuestionMap = false" class="lg:hidden fixed inset-0 bg-black/50 z-[130] backdrop-blur-sm"></div>
+
+    <div :class="showMobileQuestionMap ? 'translate-y-0' : 'translate-y-full lg:translate-y-0'"
+         class="fixed bottom-0 left-0 right-0 z-[140] lg:sticky lg:top-24 bg-white p-6 rounded-t-[2.5rem] lg:rounded-[2.5rem] border-t lg:border border-gray-200 shadow-[0_-15px_40px_rgba(0,0,0,0.1)] lg:shadow-xl flex flex-col max-h-[70vh] lg:max-h-[calc(100vh-120px)] transition-transform duration-300">
         
-        <div class="flex justify-between items-center mb-3 lg:mb-4">
-            <h3 class="font-black text-gray-800 flex items-center gap-2 text-sm lg:text-lg">
-                <span>📊</span> 
-                <span class="hidden lg:inline">DANH SÁCH CÂU HỎI</span>
-                <span class="lg:hidden text-blue-600">TIẾN ĐỘ LÀM BÀI</span>
-            </h3>
-            <button @click="submitExam(true)" class="lg:hidden bg-blue-600 text-white px-5 py-2.5 rounded-xl font-black text-xs shadow-lg shadow-blue-200 active:scale-95 transition-all">
-                NỘP BÀI
-            </button>
+        <div class="hidden lg:flex items-center justify-between bg-gray-900 text-white p-4 rounded-2xl mb-6 shadow-lg shadow-blue-900/20 border border-gray-700">
+            <div class="flex flex-col">
+                <span class="text-[9px] font-black text-gray-400 uppercase tracking-widest">Thời gian còn lại</span>
+                <span :class="timeLeft < 300 ? 'text-red-400' : 'text-blue-400'" class="text-2xl font-black font-mono leading-none transition-colors">
+                    {{ formattedTime }}
+                </span>
+            </div>
+            <div class="text-2xl">⏳</div>
         </div>
 
-        <div class="flex-1 overflow-y-auto pr-2 space-y-4 lg:space-y-6 custom-scrollbar pb-2">
+        <div @click="showMobileQuestionMap = false" class="lg:hidden w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-4 cursor-pointer"></div>
+
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-black text-gray-800 flex items-center gap-2 text-base lg:text-lg">
+                <span>📊</span> CÂU HỎI
+            </h3>
+        </div>
+
+        <div class="flex-1 overflow-y-auto pr-2 space-y-6 custom-scrollbar pb-4">
             <template v-for="type in ['mc', 'tf', 'sa']" :key="type">
                 <div v-if="currentExam.questions.some(q => q.type === type)">
-                    <p class="text-[9px] md:text-[10px] font-black text-gray-400 uppercase mb-2 lg:mb-3 tracking-widest border-l-2 border-blue-600 pl-2">
+                    <p class="text-[10px] font-black text-gray-400 uppercase mb-3 tracking-widest border-l-2 border-blue-600 pl-2">
                         {{ type === 'mc' ? 'Trắc nghiệm' : type === 'tf' ? 'Đúng/Sai' : 'Trả lời ngắn' }}
                     </p>
-                    
-                    <div class="grid grid-cols-7 sm:grid-cols-8 lg:grid-cols-5 gap-1.5 lg:gap-2">
+                    <div class="grid grid-cols-6 sm:grid-cols-8 lg:grid-cols-5 gap-2">
                         <button v-for="(q, qIndex) in currentExam.questions" 
                                 v-show="q.type === type" 
                                 :key="qIndex" 
-                                @click="scrollToQuestion(qIndex)"
+                                @click="scrollToQuestion(qIndex); showMobileQuestionMap = false"
                                 :class="[
-                                    'w-8 h-8 md:w-10 md:h-10 rounded-xl font-black text-[10px] md:text-xs transition-all border-2 flex items-center justify-center',
+                                    'w-10 h-10 rounded-xl font-black text-xs transition-all border-2 flex items-center justify-center',
                                     ((q.type === 'mc' && studentAnswers[qIndex].choice !== null) ||
                                      (q.type === 'tf' && studentAnswers[qIndex].choice && studentAnswers[qIndex].choice.every(v => v !== null)) ||
                                      ((q.type === 'sa' || q.type === 'essay') && studentAnswers[qIndex].text && studentAnswers[qIndex].text.trim() !== ''))
@@ -986,7 +895,7 @@
         </div>
 
         <button @click="submitExam(true)" 
-                class="hidden lg:block w-full mt-6 bg-blue-600 text-white py-4 rounded-xl font-black text-sm hover:bg-blue-700 shadow-xl shadow-blue-100 transition-all active:scale-95">
+                class="w-full mt-4 bg-red-600 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-red-100 transition-all active:scale-95">
             NỘP BÀI NGAY
         </button>
     </div>
