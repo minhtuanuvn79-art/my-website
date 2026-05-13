@@ -841,26 +841,19 @@ aiImageBase64.value = base64Img.split(',')[1];
 };
 
 const handleGenerateAI = async () => {
-    // 1. Kiểm tra đầu vào
     if (!aiPrompt.value.trim() && !aiImageBase64.value) {
         return showNotify("Vui lòng nhập nội dung hoặc tải file đề!", "error");
     }
     
     isGenerating.value = true;
-    showNotify("AI đang phân tích tài liệu (có thể mất 10-30s)...", "success");
+    showNotify("AI đang phân tích tài liệu...", "success");
 
     try {
-        // 2. Ép AI trả về đúng cấu trúc đề thi của EduPro
-        const strictPrompt = `
-            Bạn là chuyên gia bóc tách đề thi. Hãy bóc tách nội dung sau thành danh sách câu hỏi.
-            YÊU CẦU BẮT BUỘC: 
-            - Trả về DUY NHẤT một mảng JSON.
-            - Mỗi phần tử có cấu trúc: {"type":"mc","text":"...","options":["A","B","C","D"],"correct":0,"explanation":"..."}
-            - Nếu là Đúng/Sai dùng type "tf" và correct là mảng [true, false, true, true].
-            Nội dung: ${aiPrompt.value.trim()}
-        `;
+        const strictPrompt = `Bóc tách đề thi sau thành mảng JSON câu hỏi. 
+        Cấu trúc: [{"type":"mc","text":"...","options":["A","B","C","D"],"correct":0,"explanation":"..."}]
+        Nội dung: ${aiPrompt.value.trim()}`;
 
-        // 3. Gọi Function với Payload chuẩn
+        // Gọi Function
         const { data, error } = await supabaseClient.functions.invoke('generate-exam', { 
             body: { 
                 prompt: strictPrompt, 
@@ -868,34 +861,23 @@ const handleGenerateAI = async () => {
             } 
         });
         
-        // 4. Kiểm tra lỗi trả về từ Supabase
+        // Bắt lỗi từ Edge Function
         if (error) {
-            // Lấy chi tiết lỗi từ phản hồi của Server (index.ts)
-            const errDetail = await error.context?.json();
-            throw new Error(errDetail?.error || "Server AI gặp sự cố (Lỗi 500)");
+            const errBody = await error.context?.json();
+            throw new Error(errBody?.error || "Lỗi Server 500");
         }
         
-        // 5. Xử lý dữ liệu văn bản từ AI
-        // index.ts trả về { text: "..." } hoặc chuỗi trực tiếp tùy theo bản bạn đã lưu
-        let aiRawText = (typeof data === 'string') ? data : (data.text || "");
-        
-        if (!aiRawText) throw new Error("AI không trả về nội dung.");
+        // Xử lý dữ liệu trả về (đảm bảo lấy từ data.text)
+        let rawJson = typeof data === 'string' ? data : data.text;
+        const cleanJson = rawJson.replace(/```json/g, '').replace(/```/g, '').trim();
+        const questions = JSON.parse(cleanJson);
 
-        // Làm sạch dữ liệu (loại bỏ markdown ```json ... ```)
-        const cleanJsonString = aiRawText.replace(/```json/g, '').replace(/```/g, '').trim();
-        
-        const finalQuestions = JSON.parse(cleanJsonString);
-
-        if (Array.isArray(finalQuestions)) {
-            newExam.value.questions = finalQuestions;
-            showNotify(`Thành công! Đã bóc tách được ${finalQuestions.length} câu hỏi.`);
-            view.value = 'create-exam'; 
-        } else {
-            throw new Error("Dữ liệu AI trả về không đúng định dạng mảng.");
-        }
+        newExam.value.questions = questions;
+        showNotify(`Thành công! Đã bóc tách ${questions.length} câu.`);
+        view.value = 'create-exam'; 
         
     } catch (err) { 
-        console.error("Lỗi xử lý AI:", err);
+        console.error("Lỗi AI:", err);
         showNotify("Lỗi: " + err.message, "error"); 
     } finally { 
         isGenerating.value = false; 
