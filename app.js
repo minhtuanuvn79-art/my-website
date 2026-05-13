@@ -862,10 +862,11 @@ const handleGenerateAI = async () => {
         });
         
         // Bắt lỗi từ Edge Function
-        if (error) {
-            const errBody = await error.context?.json();
-            throw new Error(errBody?.error || "Lỗi Server 500");
-        }
+if (error) {
+    // Sửa đoạn này để đọc lỗi chi tiết từ Server trả về
+    const errBody = await error.context?.json(); 
+    throw new Error(errBody?.error || "Lỗi hệ thống AI");
+}
         
         // Xử lý dữ liệu trả về (đảm bảo lấy từ data.text)
         let rawJson = typeof data === 'string' ? data : data.text;
