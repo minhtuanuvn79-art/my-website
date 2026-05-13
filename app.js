@@ -840,53 +840,62 @@ aiImageBase64.value = base64Img.split(',')[1];
     event.target.value = ''; 
 };
 
-// Tìm hàm handleGenerateAI trong app.js của bạn và thay thế đoạn gọi API:
 const handleGenerateAI = async () => {
+    // 1. Kiểm tra đầu vào
     if (!aiPrompt.value.trim() && !aiImageBase64.value) {
         return showNotify("Vui lòng nhập nội dung hoặc tải file đề!", "error");
     }
     
     isGenerating.value = true;
-    showNotify("AI đang xử lý tài liệu...", "success");
+    showNotify("AI đang phân tích tài liệu (có thể mất 10-30s)...", "success");
 
     try {
+        // 2. Ép AI trả về đúng cấu trúc đề thi của EduPro
         const strictPrompt = `
-            Hãy bóc tách các câu hỏi từ nội dung này. 
-            Trả về duy nhất một mảng JSON các object có cấu trúc:
-            [{ "type": "mc", "text": "...", "options": ["A","B","C","D"], "correct": 0, "explanation": "..." }]
-            Nội dung bổ sung: ${aiPrompt.value.trim()}
+            Bạn là chuyên gia bóc tách đề thi. Hãy bóc tách nội dung sau thành danh sách câu hỏi.
+            YÊU CẦU BẮT BUỘC: 
+            - Trả về DUY NHẤT một mảng JSON.
+            - Mỗi phần tử có cấu trúc: {"type":"mc","text":"...","options":["A","B","C","D"],"correct":0,"explanation":"..."}
+            - Nếu là Đúng/Sai dùng type "tf" và correct là mảng [true, false, true, true].
+            Nội dung: ${aiPrompt.value.trim()}
         `;
 
-        const payload = { 
-            prompt: strictPrompt, 
-            imageBase64: aiImageBase64.value || null 
-        };
-
-        // Gọi Function
-const { data, error } = await supabaseClient.functions.invoke('generate-exam', { 
-    body: { 
-        prompt: aiPrompt.value, 
-        imageBase64: aiImageBase64.value 
-    } 
-});
+        // 3. Gọi Function với Payload chuẩn
+        const { data, error } = await supabaseClient.functions.invoke('generate-exam', { 
+            body: { 
+                prompt: strictPrompt, 
+                imageBase64: aiImageBase64.value || null 
+            } 
+        });
         
-        // Nếu Server trả về lỗi (bao gồm lỗi 500 đã được bắt)
+        // 4. Kiểm tra lỗi trả về từ Supabase
         if (error) {
-            const serverError = await error.context?.json();
-            throw new Error(serverError?.error || "Lỗi kết nối Server AI");
+            // Lấy chi tiết lỗi từ phản hồi của Server (index.ts)
+            const errDetail = await error.context?.json();
+            throw new Error(errDetail?.error || "Server AI gặp sự cố (Lỗi 500)");
         }
         
-        // Xử lý dữ liệu trả về từ AI
-        let aiRawText = data.text || "";
-        const cleanData = aiRawText.replace(/```json/g, '').replace(/```/g, '').trim();
-        const finalQuestions = JSON.parse(cleanData);
+        // 5. Xử lý dữ liệu văn bản từ AI
+        // index.ts trả về { text: "..." } hoặc chuỗi trực tiếp tùy theo bản bạn đã lưu
+        let aiRawText = (typeof data === 'string') ? data : (data.text || "");
+        
+        if (!aiRawText) throw new Error("AI không trả về nội dung.");
 
-        newExam.value.questions = finalQuestions;
-        showNotify(`Thành công! Đã bóc tách được ${finalQuestions.length} câu.`);
-        view.value = 'create-exam'; 
+        // Làm sạch dữ liệu (loại bỏ markdown ```json ... ```)
+        const cleanJsonString = aiRawText.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        const finalQuestions = JSON.parse(cleanJsonString);
+
+        if (Array.isArray(finalQuestions)) {
+            newExam.value.questions = finalQuestions;
+            showNotify(`Thành công! Đã bóc tách được ${finalQuestions.length} câu hỏi.`);
+            view.value = 'create-exam'; 
+        } else {
+            throw new Error("Dữ liệu AI trả về không đúng định dạng mảng.");
+        }
         
     } catch (err) { 
-        console.error("Lỗi chi tiết:", err);
+        console.error("Lỗi xử lý AI:", err);
         showNotify("Lỗi: " + err.message, "error"); 
     } finally { 
         isGenerating.value = false; 
