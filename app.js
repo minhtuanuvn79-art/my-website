@@ -94,16 +94,15 @@ const studentFile = ref(null);       // File nộp bài tự luận của học 
 const isAIGradingSubmission = ref(false); // Trạng thái AI đang chấm bài khi nộp\
 const defaultSettings = {
     scoreVisibility: 'always',
-    answerVisibility: 'always',
+    answerVisibility: 'always', // Đổi mặc định thành always để test cho dễ
     attemptLimit: 0,
     password: '',
     autoMonitor: true,
     shuffleMode: true,
     tfGradingScale: [0, 0.1, 0.25, 0.5, 1.0],
-    // --- THUỘC TÍNH MỚI ---
     isPublished: false,
     scheduledAt: null,
-    closedAt: null      // Thêm dòng này: Thời điểm đóng đề
+    closedAt: null
 };
 
         // --- 2. SAU ĐÓ MỚI ĐẾN WATCH VÀ HÀM ---
@@ -734,7 +733,7 @@ const filteredResults = computed(() => {
         .map((q, idx) => ({ ...q, originalIdx: idx }))
         .filter(q => q.type === activeQuestionTab.value);
 });
-        const handleAiFileUpload = async (event) => {
+const handleAiFileUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
     
@@ -754,12 +753,12 @@ const filteredResults = computed(() => {
             img.onload = () => {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
-                const scale = Math.min(1500 / img.width, 1);
-                canvas.width = img.width * scale;
-                canvas.height = img.height * scale;
+const scale = Math.min(1000 / img.width, 1);
+canvas.width = img.width * scale;
+canvas.height = img.height * scale;
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 
-                const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
+                const compressedBase64 = canvas.toDataURL('image/jpeg', 0.5);
                 aiUploadedImage.value = compressedBase64; 
                 aiImageBase64.value = compressedBase64.split(',')[1]; 
                 showNotify("Đã nén ảnh thành công!"); 
@@ -789,7 +788,7 @@ const filteredResults = computed(() => {
                 
                 for (let i = 1; i <= numPages; i++) {
                     const page = await pdf.getPage(i);
-                    const viewport = page.getViewport({ scale: 1.2 }); 
+                    const viewport = page.getViewport({ scale: 0.8 });
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
                     canvas.height = viewport.height;
@@ -812,13 +811,9 @@ const filteredResults = computed(() => {
                     finalCtx.drawImage(canvas, 0, currentY);
                     currentY += canvas.height;
                 }
-                
-                // Nén JPEG 0.4 để giảm dung lượng khi gửi đề thi nhiều câu
-                // Tìm trong handleAiFileUpload đoạn xử lý PDF
-// app.js
-const base64Img = finalCanvas.toDataURL('image/jpeg', 0.25); // Tăng lên 0.25 để AI nhìn thấy chữ
-//                 aiUploadedImage.value = base64Img; 
-                aiImageBase64.value = base64Img.split(',')[1]; 
+
+const base64Img = finalCanvas.toDataURL('image/jpeg', 0.1); 
+aiImageBase64.value = base64Img.split(',')[1];
                 
                 showNotify(`Đã chuẩn bị xong ${numPages} trang PDF!`);
             } catch(err) {
@@ -845,100 +840,54 @@ const base64Img = finalCanvas.toDataURL('image/jpeg', 0.25); // Tăng lên 0.25 
     event.target.value = ''; 
 };
 
+// Tìm hàm handleGenerateAI trong app.js của bạn và thay thế đoạn gọi API:
 const handleGenerateAI = async () => {
     if (!aiPrompt.value.trim() && !aiImageBase64.value) {
         return showNotify("Vui lòng nhập nội dung hoặc tải file đề!", "error");
     }
     
     isGenerating.value = true;
+    showNotify("AI đang xử lý tài liệu...", "success");
 
-    // TẠO CHUỖI YÊU CẦU DỰA TRÊN MA TRẬN (LỌC THEO NÚT BẤM)
-    let matrixRequirements = [];
-    if (aiMatrix.value.mc) matrixRequirements.push("- Trắc nghiệm 4 đáp án (type: 'mc')");
-    if (aiMatrix.value.tf) matrixRequirements.push("- Đúng/Sai dạng chùm 4 ý (type: 'tf')");
-    if (aiMatrix.value.sa) matrixRequirements.push("- Tự luận/Trả lời ngắn (type: 'sa')");
-
-    if (matrixRequirements.length === 0) {
-        isGenerating.value = false;
-        return showNotify("Vui lòng bật ít nhất 1 loại câu hỏi trong Ma trận!", "error");
-    }
-
-    showNotify("AI đang bóc tách theo đúng cấu hình ma trận bạn chọn...", "success");
-    
     try {
-        // Cấu trúc Prompt mới: Ép AI chỉ được phép làm các phần đang BẬT
         const strictPrompt = `
-            Dựa trên nội dung tài liệu này, hãy CHỈ bóc tách các câu hỏi thuộc các loại sau:
-            ${matrixRequirements.join('\n')}
-            
-            LƯU Ý NGHIÊM NGẶT: 
-            - Tuyệt đối KHÔNG tạo các loại câu hỏi khác ngoài danh sách trên.
-            - Nếu tài liệu có loại câu hỏi khác, hãy bỏ qua chúng.
-            - Trả về kết quả dưới dạng mảng JSON các object.
-            
+            Hãy bóc tách các câu hỏi từ nội dung này. 
+            Trả về duy nhất một mảng JSON các object có cấu trúc:
+            [{ "type": "mc", "text": "...", "options": ["A","B","C","D"], "correct": 0, "explanation": "..." }]
             Nội dung bổ sung: ${aiPrompt.value.trim()}
         `;
 
         const payload = { 
             prompt: strictPrompt, 
-            imageBase64: aiImageBase64.value || null,
-            // Gửi thêm matrix để Server-side (nếu có) biết đường xử lý thêm
-            matrix: aiMatrix.value 
+            imageBase64: aiImageBase64.value || null 
         };
 
-        const { data, error } = await supabaseClient.functions.invoke('generate-exam', { 
-            body: payload 
-        });
+        // Gọi Function
+const { data, error } = await supabaseClient.functions.invoke('generate-exam', { 
+    body: { 
+        prompt: aiPrompt.value, 
+        imageBase64: aiImageBase64.value 
+    } 
+});
         
-        if (error) throw error;
+        // Nếu Server trả về lỗi (bao gồm lỗi 500 đã được bắt)
+        if (error) {
+            const serverError = await error.context?.json();
+            throw new Error(serverError?.error || "Lỗi kết nối Server AI");
+        }
         
-        let generatedQuestions = [];
-        try {
-            let aiRawText = typeof data === 'string' ? data : (data.text || JSON.stringify(data));
-            const cleanData = aiRawText.replace(/```json/g, '').replace(/```/g, '').trim();
-            generatedQuestions = JSON.parse(cleanData);
-        } catch (jsonErr) {
-            throw new Error("Dữ liệu AI trả về lỗi cấu trúc. Hãy thử lại.");
-        }
+        // Xử lý dữ liệu trả về từ AI
+        let aiRawText = data.text || "";
+        const cleanData = aiRawText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const finalQuestions = JSON.parse(cleanData);
 
-        // --- BỘ LỌC CUỐI CÙNG (DOUBLE CHECK) ---
-        // Ép kiểu dữ liệu lần cuối để chắc chắn không lọt lưới loại câu hỏi đã tắt
-        const finalQuestions = (Array.isArray(generatedQuestions) ? generatedQuestions : [])
-            .filter(q => {
-                if (q.type === 'mc' && aiMatrix.value.mc) return true;
-                if (q.type === 'tf' && aiMatrix.value.tf) return true;
-                if (q.type === 'sa' && aiMatrix.value.sa) return true;
-                return false; // Loại bỏ nếu type không nằm trong ma trận đang bật
-            })
-            .map(q => {
-                return { 
-                    type: q.type, 
-                    text: q.text || "Câu hỏi không có nội dung", 
-                    options: q.options || (q.type === 'sa' ? [] : ['', '', '', '']), 
-                    correct: q.correct !== undefined ? q.correct : (q.type === 'tf' ? [true, true, true, true] : 0), 
-                    explanation: q.explanation || '',
-                    points: q.type === 'tf' ? 1.0 : (q.type === 'sa' ? 0.5 : 0.25) 
-                };
-            });
-
-        if (finalQuestions.length === 0) {
-            throw new Error("Không tìm thấy câu hỏi nào phù hợp với ma trận đã chọn.");
-        }
-
-        newExam.value = { 
-            title: 'Đề bóc tách AI (' + matrixRequirements.length + ' phần) - ' + new Date().toLocaleDateString('vi-VN'), 
-            type: 'quiz', 
-            time: 45, 
-            questions: finalQuestions, 
-            essayContent: '', 
-            settings: { ...defaultSettings } 
-        };
-
+        newExam.value.questions = finalQuestions;
         showNotify(`Thành công! Đã bóc tách được ${finalQuestions.length} câu.`);
         view.value = 'create-exam'; 
         
     } catch (err) { 
-        showNotify("Lỗi xử lý: " + err.message, "error"); 
+        console.error("Lỗi chi tiết:", err);
+        showNotify("Lỗi: " + err.message, "error"); 
     } finally { 
         isGenerating.value = false; 
     }
@@ -1532,8 +1481,12 @@ const confirmBulkDelete = async () => {
         showNotify("Lỗi kết nối hệ thống", "error");
     }
 };
-
+const sendRealtimeUpdate = () => {
+    // Hàm này có thể để trống hoặc dùng để gửi tín hiệu "đang làm bài" qua Realtime
+    console.log("Đang đồng bộ đáp án...");
+};
 return {
+    sendRealtimeUpdate,
     showMobileQuestionMap,
     isConfirmingSubmit,
     getTfScore,

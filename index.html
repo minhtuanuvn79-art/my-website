@@ -933,32 +933,78 @@
     </div>
 </div>
 
-                <div v-if="view === 'result'" class="animate-fadeIn max-w-xl mx-auto py-12">
-                    <div class="bg-white rounded-3xl shadow-xl overflow-hidden text-center border border-gray-100">
-                        <div class="bg-blue-600 py-10 text-white relative overflow-hidden">
-                            <div class="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -mr-10 -mt-10"></div>
-                            <h2 class="text-3xl font-black relative z-10">🎉 Hoàn thành bài thi!</h2>
-                        </div>
-                        <div class="p-10">
-                            <div v-if="currentExam?.settings?.showScore === 'none'" class="mb-10 text-gray-500 font-medium p-6 bg-gray-50 rounded-xl border border-gray-200">
-                                <span class="text-4xl block mb-3">🤫</span>
-                                Giáo viên đã thiết lập ẩn điểm số của bài thi này.
-                            </div>
-                            <div v-else class="flex justify-center items-center gap-10 mb-10">
-                                <div>
-                                    <p class="text-sm text-gray-400 font-bold uppercase tracking-wider mb-1">Điểm số</p>
-                                    <p class="text-6xl font-black text-blue-600">{{ finalResult.score.toFixed(1) }}</p>
-                                </div>
-                                <div class="w-px h-16 bg-gray-200"></div>
-                                <div>
-                                    <p class="text-sm text-gray-400 font-bold uppercase tracking-wider mb-1">Số câu đúng</p>
-                                    <p class="text-6xl font-black text-green-500">{{ finalResult.correct }}<span class="text-2xl text-gray-300">/{{ currentExam?.questions?.length }}</span></p>
-                                </div>
-                            </div>
-                            <button @click="goHome" class="w-full bg-gray-100 text-gray-700 font-bold py-4 rounded-xl hover:bg-gray-200 transition shadow-inner">Quay lại không gian học tập</button>
+<div v-if="view === 'result'" class="animate-fadeIn max-w-4xl mx-auto py-12 px-4">
+    <div class="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
+        <div class="bg-blue-600 py-10 text-white text-center relative overflow-hidden">
+            <h2 class="text-3xl font-black relative z-10">🎉 Hoàn thành bài thi!</h2>
+        </div>
+        
+        <div class="p-8">
+            <div v-if="currentExam?.settings?.scoreVisibility !== 'none'" class="flex justify-center items-center gap-10 mb-10 text-center">
+                <div>
+                    <p class="text-sm text-gray-400 font-bold uppercase tracking-wider mb-1">Điểm số</p>
+                    <p class="text-6xl font-black text-blue-600">{{ finalResult.score.toFixed(1) }}</p>
+                </div>
+                <div class="w-px h-16 bg-gray-200"></div>
+                <div>
+                    <p class="text-sm text-gray-400 font-bold uppercase tracking-wider mb-1">Số câu đúng</p>
+                    <p class="text-6xl font-black text-green-500">{{ finalResult.correct }}<span class="text-2xl text-gray-300">/{{ currentExam?.questions?.length }}</span></p>
+                </div>
+            </div>
+
+            <div v-if="currentExam?.settings?.answerVisibility === 'always'" class="mt-10 space-y-6">
+                <h3 class="text-xl font-black text-gray-800 border-b pb-4">Xem lại đáp án chi tiết:</h3>
+                
+                <div v-for="(q, idx) in currentExam.questions" :key="idx" class="p-6 bg-gray-50 rounded-2xl border border-gray-100">
+                    <div class="flex gap-4 mb-4">
+                        <span class="font-black text-blue-600">Câu {{ idx + 1 }}:</span>
+                        <div class="font-bold text-gray-800" v-html="q.text"></div>
+                    </div>
+
+                    <div v-if="q.type === 'mc'" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div v-for="(opt, oIdx) in q.options" :key="oIdx" 
+                             :class="[
+                                q.correct === oIdx ? 'bg-green-100 border-green-500 text-green-700' : 
+                                (studentAnswers[idx].choice === oIdx ? 'bg-red-100 border-red-500 text-red-700' : 'bg-white border-gray-100')
+                             ]"
+                             class="p-3 rounded-xl border-2 text-sm font-medium">
+                            <span class="font-bold mr-2">{{ String.fromCharCode(65 + oIdx) }}.</span> {{ opt }}
+                            <span v-if="q.correct === oIdx" class="ml-auto font-black text-[10px] uppercase tracking-widest"> (Đáp án đúng)</span>
                         </div>
                     </div>
+
+<div v-if="q.type === 'tf'" class="space-y-2">
+    <div v-for="(opt, oIdx) in q.options" :key="oIdx" 
+         class="flex justify-between p-2 rounded-lg text-xs border"
+         :class="studentAnswers[idx].choice[oIdx] === q.correct[oIdx] ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'">
+        
+        <span>{{ String.fromCharCode(97 + oIdx) }}) {{ opt }}</span>
+        
+        <div class="flex gap-2 font-bold">
+            <span class="text-gray-400">Bạn chọn: {{ studentAnswers[idx].choice[oIdx] ? 'Đ' : 'S' }}</span>
+            <span :class="q.correct[oIdx] ? 'text-green-600' : 'text-red-600'">
+                Đáp án: {{ q.correct[oIdx] ? 'ĐÚNG' : 'SAI' }}
+            </span>
+        </div>
+    </div>
+</div>
+
+                    <div v-if="q.explanation" class="mt-4 p-3 bg-yellow-50 rounded-xl text-xs text-yellow-700 italic border-l-4 border-yellow-400">
+                        <b>Giải thích:</b> {{ q.explanation }}
+                    </div>
                 </div>
+            </div>
+
+            <div v-else class="text-center p-6 bg-gray-50 rounded-xl border border-dashed border-gray-300 text-gray-400 font-bold mb-8">
+                Giáo viên không cho phép xem đáp án chi tiết.
+            </div>
+
+            <button @click="goHome" class="w-full bg-gray-900 text-white font-bold py-4 rounded-xl hover:bg-black transition shadow-lg mt-6">
+                Quay lại trang chủ
+            </button>
+        </div>
+    </div>
+</div>
 
 <div v-if="view === 'view-results'" class="animate-fadeIn">
     <div class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1063,37 +1109,33 @@
                         </div>
                         
                         <div class="p-6 overflow-y-auto flex-1 space-y-6">
-                            <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                                <h4 class="font-bold text-gray-800 mb-4 text-lg border-b border-gray-100 pb-2">Điểm và đáp án khi làm xong</h4>
-                                <div class="space-y-4">
-                                    <div class="flex items-center">
-                                        <span class="w-48 font-semibold text-gray-600 text-sm">Cho xem điểm</span>
-                                        <div class="flex gap-6">
-                                            <label class="flex items-center gap-2 cursor-pointer">
-                                                <input type="radio" v-model="newExam.settings.scoreVisibility" value="none" class="text-blue-600">
-                                                <span class="text-sm">Không</span>
-                                            </label>
-                                            <label class="flex items-center gap-2 cursor-pointer">
-                                                <input type="radio" v-model="newExam.settings.scoreVisibility" value="always" class="text-blue-600">
-                                                <span class="text-sm">Khi làm bài xong</span>
-                                            </label>
-                                        </div>
-                                    </div>
-                                    <div class="flex items-center">
-                                        <span class="w-48 font-semibold text-gray-600 text-sm">Cho xem đề thi và đáp án</span>
-                                        <div class="flex gap-6">
-                                            <label class="flex items-center gap-2 cursor-pointer">
-                                                <input type="radio" v-model="newExam.settings.answerVisibility" value="none" class="text-blue-600">
-                                                <span class="text-sm">Không</span>
-                                            </label>
-                                            <label class="flex items-center gap-2 cursor-pointer">
-                                                <input type="radio" v-model="newExam.settings.answerVisibility" value="always" class="text-blue-600">
-                                                <span class="text-sm">Khi làm bài xong</span>
-                                            </label>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+<div class="flex items-center mb-4">
+    <span class="w-48 font-semibold text-gray-600 text-sm">Cho xem điểm</span>
+    <div class="flex gap-6">
+        <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" v-model="newExam.settings.scoreVisibility" value="none" class="text-blue-600">
+            <span class="text-sm">Không</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" v-model="newExam.settings.scoreVisibility" value="always" class="text-blue-600">
+            <span class="text-sm">Khi làm bài xong</span>
+        </label>
+    </div>
+</div>
+
+<div class="flex items-center">
+    <span class="w-48 font-semibold text-gray-600 text-sm">Cho xem đáp án</span>
+    <div class="flex gap-6">
+        <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" v-model="newExam.settings.answerVisibility" value="none" class="text-blue-600">
+            <span class="text-sm">Không</span>
+        </label>
+        <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" v-model="newExam.settings.answerVisibility" value="always" class="text-blue-600">
+            <span class="text-sm">Khi làm bài xong</span>
+        </label>
+    </div>
+</div>
 
                             <div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                                 <h4 class="font-bold text-gray-800 mb-4 text-lg border-b border-gray-100 pb-2">Bảo mật</h4>
