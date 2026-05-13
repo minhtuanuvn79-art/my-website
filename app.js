@@ -863,9 +863,9 @@ const handleGenerateAI = async () => {
         
         // Bắt lỗi từ Edge Function
 if (error) {
-    // Sửa đoạn này để đọc lỗi chi tiết từ Server trả về
+    // Lấy nội dung lỗi từ Server trả về thay vì hiện "Lỗi 500" chung chung
     const errBody = await error.context?.json(); 
-    throw new Error(errBody?.error || "Lỗi hệ thống AI");
+    throw new Error(errBody?.error || "AI đang bận, vui lòng thử lại sau.");
 }
         
         // Xử lý dữ liệu trả về (đảm bảo lấy từ data.text)
