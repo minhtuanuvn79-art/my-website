@@ -9,6 +9,11 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.21/mammoth.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quill-image-resize-module@3.0.0/image-resize.min.js"></script>
     <link rel="stylesheet" href="style.css">
     <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/3413/3413535.png">
     <script>
@@ -653,7 +658,10 @@
                 </div>
             </div>
 
-            <textarea v-model="newExam.questions[q.originalIdx].text" rows="2" class="w-full bg-transparent border-none focus:ring-0 text-lg font-bold text-gray-800 placeholder-gray-300 resize-none" placeholder="Nhập nội dung câu hỏi..."></textarea>
+<rich-text-editor 
+    v-model="newExam.questions[q.originalIdx].text" 
+    placeholder="Nhập nội dung câu hỏi (Có thể chèn ảnh, công thức toán)...">
+</rich-text-editor>
 
             <div class="mt-4">
     <div v-if="q.type === 'mc'" class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -679,8 +687,11 @@
     </div>
 
     <div v-if="q.type === 'sa'" class="mt-2">
-        <textarea v-model="newExam.questions[q.originalIdx].explanation" class="w-full p-4 bg-white rounded-xl border border-gray-200 text-sm outline-none focus:border-purple-500" placeholder="Nhập đáp án mẫu hoặc hướng dẫn chấm cho AI..."></textarea>
-    </div>
+<rich-text-editor 
+    v-model="newExam.questions[q.originalIdx].explanation" 
+    placeholder="Nhập đáp án mẫu hoặc hướng dẫn chấm chi tiết...">
+</rich-text-editor>
+</div>
 </div>
         </div>
         
@@ -690,11 +701,14 @@
     </div>
 </div>
 
-                        <div v-if="newExam.type === 'essay'" class="border-t border-gray-100 pt-6 animate-fadeIn">
-                            <h3 class="font-bold text-lg text-gray-800 mb-2">Đề bài tự luận chung</h3>
-                            <p class="text-xs text-gray-500 mb-3 font-medium italic">Học sinh sẽ đọc nội dung dưới đây và tải lên tệp bài làm duy nhất.</p>
-                            <textarea v-model="newExam.essayContent" rows="8" class="w-full px-5 py-4 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:outline-none bg-gray-50 font-medium text-gray-700 shadow-inner" placeholder="Nhập chi tiết yêu cầu đề bài..."></textarea>
-                        </div>
+<div v-if="newExam.type === 'essay'" class="border-t border-gray-100 pt-6 animate-fadeIn">
+<h3 class="font-bold text-lg text-gray-800 mb-2">Đề bài tự luận chung</h3>
+<p class="text-xs text-gray-500 mb-3 font-medium italic">Học sinh sẽ đọc nội dung dưới đây và tải lên tệp bài làm duy nhất.</p>
+<rich-text-editor 
+    v-model="newExam.essayContent" 
+    placeholder="Nhập chi tiết yêu cầu đề bài tự luận (có thể in đậm, chèn bảng biểu)...">
+</rich-text-editor>
+</div>
                     </div>
                 </div>
 
