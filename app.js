@@ -512,7 +512,12 @@ const handleLogin = async () => {
 const logout = () => {
     if (view.value === 'exam-room' && !confirm("Đăng xuất khi đang thi?")) return;
 
-    
+    // NGẮT TOÀN BỘ KẾT NỐI KHI ĐĂNG XUẤT ĐỂ TRÁNH TRÙNG LẶP DỮ LIỆU
+    if (examRoomChannel) supabaseClient.removeChannel(examRoomChannel);
+    if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
+    examRoomChannel = null;
+    realtimeChannel = null;
+
     localStorage.clear();
     currentUser.value = null;
     view.value = 'login';
@@ -1411,9 +1416,15 @@ const confirmStartExam = async () => {
         if (p !== exam.settings.password) return showNotify("Mật khẩu không chính xác!", "error");
     }
 
-    // 4. Kích hoạt chế độ toàn màn hình an toàn (Tự động nhận diện và bỏ qua nếu là Điện thoại)
+// 4. Kích hoạt chế độ toàn màn hình an toàn
     enterFullScreen();
     isExamStarting.value = true; 
+
+    // --- BỔ SUNG ĐOẠN DỌN DẸP NÀY VÀO ---
+    if (examRoomChannel) {
+        supabaseClient.removeChannel(examRoomChannel);
+        examRoomChannel = null;
+    }
 
     // 5. Khởi tạo cấu trúc dữ liệu đề thi bài làm
     let examCopy = JSON.parse(JSON.stringify(exam));
@@ -1662,7 +1673,7 @@ const confirmBulkDelete = async () => {
 const sendRealtimeUpdate = async () => {
     if (view.value !== 'exam-room' || !currentExam.value) return;
 
-    // 1. Đếm tiến độ làm bài
+    // Tính toán tiến độ
     let doneCount = 0;
     studentAnswers.value.forEach(ans => {
         if (ans.choice !== null && !Array.isArray(ans.choice)) doneCount++;
@@ -1670,60 +1681,74 @@ const sendRealtimeUpdate = async () => {
         else if ((ans.text && ans.text.trim() !== '') || ans.fileData) doneCount++;
     });
 
-    // Khôi phục tên học sinh nếu lỡ F5
-    let currentProfile = studentProfile.value;
-    if (!currentProfile.fullName) {
-        const savedProfile = localStorage.getItem('eduexam_student_profile');
-        if (savedProfile) currentProfile = JSON.parse(savedProfile);
-    }
-
     const statePayload = {
-        studentName: `${currentProfile.fullName} - Lớp: ${currentProfile.className}`,
+        studentName: `${studentProfile.value.fullName} - Lớp: ${studentProfile.value.className}`,
         progress: doneCount,
         total: currentExam.value.questions.length,
         cheats: cheatWarnings.value,
         lastUpdate: new Date().toLocaleTimeString('vi-VN')
     };
 
-    // 2. Gửi tín hiệu điểm danh
-    if (!examRoomChannel) {
-        examRoomChannel = supabaseClient.channel(`exam-room-${currentExam.value.id}`, {
-            config: { presence: { key: statePayload.studentName } }
-        });
-        examRoomChannel.subscribe(async (status) => {
-            if (status === 'SUBSCRIBED') await examRoomChannel.track(statePayload);
-        });
-    } else {
-        try {
-            await examRoomChannel.track(statePayload);
-        } catch (err) {
-            console.log("Radar sync holding...");
-        }
+    // Đảm bảo kênh đã kết nối
+    const channelName = `exam-room-${String(currentExam.value.id)}`;
+    
+    // Nếu chưa có kênh thì subscribe, nếu có rồi thì cứ gửi
+    if (!examRoomChannel || examRoomChannel.topic !== channelName) {
+        examRoomChannel = supabaseClient.channel(channelName);
+        await examRoomChannel.subscribe();
     }
+
+    // Gửi Broadcast đi
+    examRoomChannel.send({
+        type: 'broadcast',
+        event: 'progress',
+        payload: statePayload
+    });
+    
+    // Track thêm presence để báo Online
+    examRoomChannel.track(statePayload);
 };
 
 const openLiveMonitor = (exam) => {
     teacherTab.value = 'monitor';
     currentExam.value = exam; 
-    
-    // BẢO VỆ CHỐNG TRẮNG TRANG: Lưu ID đề thi đang giám sát vào LocalStorage
     localStorage.setItem('eduexam_monitor_exam_id', exam.id);
-    liveMonitors.value = [];
+    liveMonitors.value = []; // Reset danh sách
     
-    // Xóa kênh cũ nếu đang giám sát đề khác
     if (examRoomChannel) supabaseClient.removeChannel(examRoomChannel);
 
-    // Tham gia kênh Radar
-    examRoomChannel = supabaseClient.channel(`exam-room-${exam.id}`);
+    const channelName = `exam-room-${String(exam.id)}`;
+    examRoomChannel = supabaseClient.channel(channelName);
     
+    // 1. Lắng nghe Broadcast (Tiến độ bài làm)
+    examRoomChannel.on('broadcast', { event: 'progress' }, ({ payload }) => {
+        // CÁCH NÀY ĐẢM BẢO VUE NHẬN DIỆN THAY ĐỔI 100%
+        const currentList = [...liveMonitors.value]; // Copy danh sách cũ
+        const idx = currentList.findIndex(s => s.studentName === payload.studentName);
+        
+        if (idx !== -1) {
+            currentList[idx] = payload; // Cập nhật phần tử
+        } else {
+            currentList.push(payload); // Thêm mới
+        }
+        
+        // Gán lại mảng mới -> Vue sẽ cập nhật giao diện ngay lập tức
+        liveMonitors.value = currentList;
+        console.log("🔥 Đã nhận và cập nhật tiến độ cho:", payload.studentName, payload.progress);
+    });
+
+    // 2. Lắng nghe Presence (Để biết ai đang Online)
     examRoomChannel.on('presence', { event: 'sync' }, () => {
         const state = examRoomChannel.presenceState();
         const activeStudents = [];
         for (const key in state) {
-            activeStudents.push(state[key][0]); 
+            if (key !== 'teacher') activeStudents.push(state[key][0]);
         }
-        liveMonitors.value = activeStudents.sort((a, b) => b.cheats - a.cheats);
-    }).subscribe();
+        // Đồng bộ danh sách online (chỉ cập nhật nếu chưa có thông tin tiến độ)
+        liveMonitors.value = [...activeStudents]; 
+    });
+
+    examRoomChannel.subscribe();
 };
 return {
     liveMonitors,

@@ -884,36 +884,39 @@
 
                     <div class="ml-0 md:ml-16">
                         <div v-if="q.type === 'mc'" class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                            <label v-for="(opt, oIdx) in q.options" :key="oIdx" 
-                                   :class="studentAnswers[idx].choice === oIdx ? 'border-blue-500 bg-blue-50 shadow-md shadow-blue-100' : 'border-gray-100 bg-gray-50'"
-                                   class="flex items-start md:items-center p-4 md:p-5 rounded-xl md:rounded-2xl border-2 cursor-pointer transition-all hover:border-blue-300">
-                                <input type="radio" :name="'q-'+idx" :value="oIdx" v-model="studentAnswers[idx].choice" @change="sendRealtimeUpdate()" class="hidden">
-                                <span :class="studentAnswers[idx].choice === oIdx ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-400 border-gray-200'" 
-                                      class="w-7 h-7 md:w-8 md:h-8 rounded-full border flex items-center justify-center font-black mr-3 md:mr-4 shrink-0 text-sm md:text-base mt-0.5 md:mt-0">
-                                    {{ String.fromCharCode(65 + oIdx) }}
-                                </span>
-                                <span class="font-bold text-gray-700 text-sm md:text-lg break-words w-full min-w-0">{{ opt }}</span>
-                            </label>
+<label v-for="(opt, oIdx) in q.options" :key="oIdx" 
+       :class="studentAnswers[idx].choice === oIdx ? 'border-blue-500 bg-blue-50' : 'border-gray-100 bg-gray-50'"
+       class="flex items-start md:items-center p-4 md:p-5 rounded-xl border-2 cursor-pointer transition-all">
+    
+    <input type="radio" :name="'q-'+idx" :value="oIdx" v-model="studentAnswers[idx].choice" @change="sendRealtimeUpdate()" class="hidden">
+    
+    <span :class="studentAnswers[idx].choice === oIdx ? 'bg-blue-600 text-white' : 'bg-white text-gray-400'" 
+          class="w-8 h-8 rounded-full border flex items-center justify-center font-black mr-4 shrink-0">
+        {{ String.fromCharCode(65 + oIdx) }}
+    </span>
+    <span class="font-bold text-gray-700 text-lg">{{ opt }}</span>
+</label>
                         </div>
 
                         <div v-if="q.type === 'tf'" class="space-y-3 md:space-y-4">
                             <div v-for="(opt, oIdx) in q.options" :key="oIdx" class="flex flex-col md:flex-row md:items-center justify-between p-3 md:p-4 bg-gray-50 rounded-xl md:rounded-2xl border border-gray-100 gap-3">
                                 <span class="font-bold text-gray-700 text-sm md:text-base break-words min-w-0">{{ String.fromCharCode(65+oIdx) }}. {{ opt }}</span>
-                                <div class="flex bg-gray-200 p-1 rounded-xl w-max shrink-0 self-end md:self-center">
-                                    <button @click="studentAnswers[idx].choice[oIdx] = true; sendRealtimeUpdate()" 
-                                            :class="studentAnswers[idx].choice[oIdx] === true ? 'bg-green-600 text-white shadow-md' : 'text-gray-500'" 
-                                            class="px-4 md:px-6 py-1.5 md:py-2 rounded-lg font-black text-[10px] md:text-xs transition-all">ĐÚNG</button>
-                                    <button @click="studentAnswers[idx].choice[oIdx] = false; sendRealtimeUpdate()" 
-                                            :class="studentAnswers[idx].choice[oIdx] === false ? 'bg-red-600 text-white shadow-md' : 'text-gray-500'" 
-                                            class="px-4 md:px-6 py-1.5 md:py-2 rounded-lg font-black text-[10px] md:text-xs transition-all">SAI</button>
-                                </div>
+<div class="flex bg-gray-200 p-1 rounded-xl w-max shrink-0">
+    <button @click="studentAnswers[idx].choice[oIdx] = true; sendRealtimeUpdate()" 
+            :class="studentAnswers[idx].choice[oIdx] === true ? 'bg-green-600 text-white' : 'text-gray-500'" 
+            class="px-6 py-2 rounded-lg font-black text-xs transition-all">ĐÚNG</button>
+            
+    <button @click="studentAnswers[idx].choice[oIdx] = false; sendRealtimeUpdate()" 
+            :class="studentAnswers[idx].choice[oIdx] === false ? 'bg-red-600 text-white' : 'text-gray-500'" 
+            class="px-6 py-2 rounded-lg font-black text-xs transition-all">SAI</button>
+</div>
                             </div>
                         </div>
 
                         <div v-if="q.type === 'sa' || q.type === 'essay'" class="mt-2">
-                            <textarea v-model="studentAnswers[idx].text" @input="sendRealtimeUpdate()" rows="4" 
-                                      class="w-full p-4 md:p-5 bg-gray-50 border-2 border-gray-100 rounded-xl md:rounded-2xl focus:border-blue-500 focus:bg-white outline-none font-medium transition-all text-sm md:text-base" 
-                                      placeholder="Nhập câu trả lời của bạn tại đây..."></textarea>
+<textarea v-model="studentAnswers[idx].text" @input="sendRealtimeUpdate()" rows="4" 
+          class="w-full p-5 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-blue-500 outline-none font-medium transition-all" 
+          placeholder="Nhập câu trả lời của bạn..."></textarea>
                         </div>
                     </div>
                 </div>
