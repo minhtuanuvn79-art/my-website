@@ -241,37 +241,3 @@ input, textarea {
 /* Thanh cuộn cho preview mượt mà */
 .custom-scrollbar::-webkit-scrollbar { width: 8px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #64748b; border-radius: 10px; }
-/* Fix lỗi Tailwind CSS đè lên định dạng của Trình soạn thảo Quill */
-.ql-editor ul {
-    list-style-type: disc !important;
-    padding-left: 1.5em !important;
-}
-.ql-editor ol {
-    list-style-type: decimal !important;
-    padding-left: 1.5em !important;
-}
-.ql-editor h1, .ql-editor h2, .ql-editor h3 {
-    font-weight: bold !important;
-}
-.ql-toolbar.ql-snow {
-    border-top-left-radius: 0.75rem;
-    border-top-right-radius: 0.75rem;
-    background-color: #f8fafc;
-    border-color: #e5e7eb !important;
-}
-.ql-container.ql-snow {
-    border-bottom-left-radius: 0.75rem;
-    border-bottom-right-radius: 0.75rem;
-    border-color: #e5e7eb !important;
-    font-family: 'Inter', sans-serif;
-    
-    /* THÊM 3 DÒNG NÀY ĐỂ KÉO GIÃN KHUNG VĂN BẢN */
-    resize: vertical;
-    overflow-y: auto;
-    min-height: 150px;
-}
-
-/* Đảm bảo hình ảnh bên trong editor không bị tràn */
-.ql-editor img {
-    max-width: 100%;
-}
