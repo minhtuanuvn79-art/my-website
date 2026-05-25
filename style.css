@@ -241,3 +241,41 @@ input, textarea {
 /* Thanh cuộn cho preview mượt mà */
 .custom-scrollbar::-webkit-scrollbar { width: 8px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #64748b; border-radius: 10px; }
+/* --- CSS CHO NỘI DUNG TỪ TINYMCE (CHUẨN WORD) --- */
+.prose-content p {
+    margin-bottom: 0.75em;
+}
+.prose-content p:last-child {
+    margin-bottom: 0;
+}
+.prose-content ul {
+    list-style-type: disc !important;
+    padding-left: 2em !important;
+    margin-bottom: 0.75em;
+}
+.prose-content ol {
+    list-style-type: decimal !important;
+    padding-left: 2em !important;
+    margin-bottom: 0.75em;
+}
+/* Hiển thị bảng biểu (Table) rõ nét cho bài làm học sinh */
+.prose-content table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 0.75em;
+    background-color: #ffffff;
+}
+.prose-content table, .prose-content th, .prose-content td {
+    border: 1px solid #cbd5e1;
+    padding: 10px;
+}
+.prose-content th {
+    background-color: #f8fafc;
+    font-weight: bold;
+}
+.prose-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    margin: 0.5em 0;
+}

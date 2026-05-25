@@ -6,7 +6,7 @@ const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 
 let realtimeChannel = null;
 let examRoomChannel = null;
-createApp({
+const app = createApp({   
     setup() {
         // Lấy lại trang và tab cũ từ bộ nhớ trình duyệt (nếu có)
 const savedView = localStorage.getItem('eduexam_current_view') || 'login';
@@ -928,13 +928,46 @@ const handleGenerateAI = async () => {
     showNotify("AI đang phân tích tài liệu...", "success");
 
     try {
-const strictPrompt = `Bóc tách đề thi sau thành mảng JSON câu hỏi. 
-        Cấu trúc: [{"type":"mc","text":"...","options":["A","B","C","D"],"correct":0,"explanation":"..."}]
-        Nội dung: ${aiPrompt.value.trim()}
+        // 1. NÂNG CẤP PROMPT: Ép AI tách biệt tuyệt đối Câu hỏi và Đáp án
+const strictPrompt = `Bóc tách đề thi sau thành mảng JSON câu hỏi. Phân loại đúng loại câu (mc: trắc nghiệm 1 đáp án đúng, tf: trắc nghiệm đúng/sai chùm 4 ý, sa: tự luận).
         
-        LƯU Ý QUAN TRỌNG: Nếu nội dung đề thi (Tin học) có chứa các đoạn mã code HTML (ví dụ: <br>, <h1>, <div>,...), bạn BẮT BUỘC phải mã hóa dấu "<" thành "&lt;" và dấu ">" thành "&gt;". Tuyệt đối không giữ nguyên thẻ HTML góc để tránh lỗi hiển thị trên giao diện.`;
+        LƯU Ý CỰC KỲ QUAN TRỌNG VỀ CẤU TRÚC (BẮT BUỘC TUÂN THỦ): 
+        1. TÁCH BIỆT NỘI DUNG VÀ ĐÁP ÁN: Phần "text" CHỈ chứa nội dung câu hỏi / phần dẫn. Tuyệt đối KHÔNG gộp các đáp án (A, B, C, D hoặc a, b, c, d) vào trong "text". 
+        2. LÀM SẠCH ĐÁP ÁN: Mảng "options" phải chứa nội dung của từng đáp án. KHÔNG BAO GIỜ bao gồm các tiền tố đánh dấu như "A.", "B.", "C.", "D." hoặc "a)", "b)", "c)", "d)" ở đầu mỗi option.
+        3. XUỐNG DÒNG: Giữ nguyên các dấu xuống dòng bằng ký tự \\n trong phần "text" nếu đó là thơ hoặc đoạn văn (TUYỆT ĐỐI không nối liền các dòng).
+        4. HTML: Mã hóa dấu "<" thành "&lt;" và ">" thành "&gt;".
+        5. CÔNG THỨC TOÁN (QUAN TRỌNG): BẮT BUỘC giữ nguyên hoặc chuyển đổi mọi công thức Toán học sang định dạng chuẩn LaTeX. Công thức trong cùng một dòng phải bọc bằng cặp dấu \\( và \\). Công thức đứng riêng 1 dòng bọc bằng $$ và $$.
+        
+        Ví dụ Cấu trúc JSON Chuẩn cho câu MC bình thường:
+        {
+          "type": "mc",
+          "text": "Thiết bị nào sau đây thường được tích hợp công nghệ AI nhận diện khuôn mặt?",
+          "options": ["Chuột máy tính", "Máy in laser", "Điện thoại thông minh", "Bàn phím cơ"],
+          "correct": 2,
+          "explanation": "..."
+        }
 
-        // Gọi Function
+        Ví dụ Cấu trúc JSON Chuẩn cho câu TF:
+        {
+          "type": "tf",
+          "text": "Để quản lý một cửa hàng, học sinh xây dựng CSDL gồm các bảng:\\nKHACHHANG (MaKH, TenKH)\\nHOADON (MaHD, MaKH)\\n\\nCác nhận định sau về thiết kế này:",
+          "options": ["Trong bảng HOADON, MaKH là khóa ngoại", "Nên chọn TenKH làm khóa chính", "Thuộc tính MaHD có thể để trống", "Bảng KHACHHANG lưu trữ hóa đơn"],
+          "correct": [true, false, false, false],
+          "explanation": "..."
+        }
+        
+        Ví dụ Cấu trúc JSON Chuẩn cho câu Toán học:
+        {
+          "type": "mc",
+          "text": "Cho hàm số \\( y = \\frac{2x+1}{x-1} \\). Tập xác định của hàm số là:",
+          "options": ["\\( \\mathbb{R} \\setminus \\{1\\} \\)", "\\( \\mathbb{R} \\)", "\\( (1; +\\infty) \\)", "\\( \\mathbb{R} \\setminus \\{-1\\} \\)"],
+          "correct": 0,
+          "explanation": "..."
+        }
+        
+        Nội dung cần xử lý: ${aiPrompt.value.trim()}`;
+
+        // Gọi API
         const { data, error } = await supabaseClient.functions.invoke('generate-exam', { 
             body: { 
                 prompt: strictPrompt, 
@@ -942,25 +975,107 @@ const strictPrompt = `Bóc tách đề thi sau thành mảng JSON câu hỏi.
             } 
         });
         
-        // Bắt lỗi từ Edge Function
-if (error) {
-    // Lấy nội dung lỗi từ Server trả về thay vì hiện "Lỗi 500" chung chung
-    const errBody = await error.context?.json(); 
-    throw new Error(errBody?.error || "AI đang bận, vui lòng thử lại sau.");
-}
+        if (error) {
+            const errBody = await error.context?.json(); 
+            throw new Error(errBody?.error || "AI đang bận, vui lòng thử lại sau.");
+        }
         
-        // Xử lý dữ liệu trả về (đảm bảo lấy từ data.text)
-        let rawJson = typeof data === 'string' ? data : data.text;
-        const cleanJson = rawJson.replace(/```json/g, '').replace(/```/g, '').trim();
-        const questions = JSON.parse(cleanJson);
+        // Trích xuất JSON từ AI
+        let rawJson = "";
+        if (typeof data === 'string') {
+            rawJson = data;
+        } else if (data && data.text) {
+            rawJson = data.text;
+        } else if (data && data.candidates && data.candidates.length > 0) {
+            rawJson = data.candidates[0].content.parts[0].text;
+        }
+
+        if (!rawJson) {
+            throw new Error("Không thể trích xuất dữ liệu từ AI.");
+        }
+
+        const cleanJson = rawJson.replace(/```json/gi, '').replace(/```/g, '').trim();
+        let questions = JSON.parse(cleanJson);
+
+// Hàm BẢO VỆ THẺ HTML (Dành riêng cho TinyMCE - Câu hỏi và Giải thích)
+        const safeEncodeHTML = (str) => {
+            if (typeof str !== 'string') return str;
+            let raw = str.replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+            return raw.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        };
+
+        // Hàm GIẢI MÃ HTML (Dành riêng cho Input Thường - Đáp án A B C D)
+        const decodeForInputs = (str) => {
+            if (typeof str !== 'string') return str;
+            // Dịch ngược các mã an toàn của AI về lại dấu < và > nguyên bản
+            return str.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+        };
+
+        // Hàm GIỮ NGUYÊN XUỐNG DÒNG (Chỉ dùng cho TinyMCE)
+        const formatLineBreaks = (str) => {
+            if (typeof str !== 'string') return str;
+            return str.replace(/\n/g, '<br>');
+        };
+
+        // 2. CHUẨN HÓA CẤU TRÚC
+        questions = questions.map(q => {
+            // Phần Câu hỏi và Giải thích (Dùng TinyMCE) -> Cần mã hóa an toàn và bọc thẻ xuống dòng
+            if (q.text) q.text = formatLineBreaks(safeEncodeHTML(q.text));
+            if (q.explanation) q.explanation = formatLineBreaks(safeEncodeHTML(q.explanation));
+            
+            // Xử lý câu TRẮC NGHIỆM (mc)
+            if (q.type === 'mc') {
+                q.points = (q.points === undefined || q.points === null) ? 0.25 : q.points;
+                if (q.options && Array.isArray(q.options)) {
+                    // Phần Đáp án (Dùng Input thường) -> Chỉ dịch ngược lại chữ thô, KHÔNG chèn <br>
+                    q.options = q.options.map(opt => decodeForInputs(opt));
+                }
+            } 
+            // Xử lý câu ĐÚNG/SAI (tf)
+            else if (q.type === 'tf') {
+                q.points = (q.points === undefined || q.points === null) ? 1.0 : q.points;
+                
+                if (!Array.isArray(q.options)) q.options = ["", "", "", ""];
+                while (q.options.length < 4) q.options.push("");
+                
+                // Phần Đáp án (Dùng Input thường) -> Chỉ dịch ngược lại chữ thô, KHÔNG chèn <br>
+                q.options = q.options.map(opt => decodeForInputs(opt));
+
+                if (!Array.isArray(q.correct)) q.correct = [true, true, true, true];
+                while (q.correct.length < 4) q.correct.push(true);
+                q.correct = q.correct.map(c => c === true || c === "true");
+            } 
+            // Xử lý câu TỰ LUẬN (sa)
+            else {
+                q.points = (q.points === undefined || q.points === null) ? 0.5 : q.points;
+            }
+
+            return q;
+        });
+
+        // Thiết lập phôi đề thi & chuyển vào phòng soạn
+        newExam.value.type = 'quiz'; 
+
+        if (!newExam.value.title) newExam.value.title = `Đề bóc tách AI (${new Date().toLocaleDateString('vi-VN')})`;
+        if (!newExam.value.time) newExam.value.time = 45; 
+        if (!newExam.value.examCode) newExam.value.examCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+        if (!newExam.value.settings || !newExam.value.settings.scoreVisibility) newExam.value.settings = { ...defaultSettings };
 
         newExam.value.questions = questions;
+
+        // Tự động nhảy Tab
+        if (questions.length > 0 && questions[0].type) {
+            activeQuestionTab.value = questions[0].type;
+        } else {
+            activeQuestionTab.value = 'mc'; 
+        }
+
         showNotify(`Thành công! Đã bóc tách ${questions.length} câu.`);
         view.value = 'create-exam'; 
         
     } catch (err) { 
         console.error("Lỗi AI:", err);
-        showNotify("Lỗi: " + err.message, "error"); 
+        showNotify("Lỗi: " + (err.message || "Đã xảy ra lỗi không xác định"), "error"); 
     } finally { 
         isGenerating.value = false; 
     }
@@ -1892,6 +2007,124 @@ return {
             currentQrCode, 
             currentQrExamTitle, 
             openQrModal
-        };
+}; // KẾT THÚC SETUP
     }
-}).mount('#app');
+});
+
+// KHỞI TẠO COMPONENT SOẠN THẢO VĂN BẢN VỚI TINYMCE 7 (BẢN PRO)
+const RichTextEditor = {
+    props: ['modelValue', 'placeholder'],
+    emits: ['update:modelValue'],
+    template: `
+        <div class="rich-text-container bg-white rounded-xl shadow-sm border border-gray-200">
+            <textarea ref="editor"></textarea>
+        </div>
+    `,
+mounted() {
+        tinymce.init({
+            target: this.$refs.editor,
+            license_key: 'gpl',
+            min_height: 250,
+            resize: 'both', 
+            menubar: false,
+            promotion: false, 
+            branding: false,  
+            paste_data_images: true, 
+            placeholder: this.placeholder || 'Nhập nội dung câu hỏi...',
+            
+            plugins: [
+                'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview',
+                'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen',
+                'media', 'table', 'wordcount'
+            ],
+            
+            // BỔ SUNG NÚT "math_templates" VÀO THANH CÔNG CỤ
+            toolbar: 'undo redo | math_templates | blocks fontfamily fontsize | ' +
+                'bold italic underline strikethrough forecolor backcolor | ' +
+                'alignleft aligncenter alignright alignjustify | ' +
+                'bullist numlist table image | removeformat fullscreen',
+            
+            image_title: true,
+            automatic_uploads: true,
+            file_picker_types: 'image',
+            file_picker_callback: (cb, value, meta) => {
+                const input = document.createElement('input');
+                input.setAttribute('type', 'file');
+                input.setAttribute('accept', 'image/*');
+
+                input.addEventListener('change', (e) => {
+                    const file = e.target.files[0];
+                    const reader = new FileReader();
+                    reader.addEventListener('load', () => {
+                        const base64 = reader.result.split(',')[1];
+                        const blobInfo = tinymce.activeEditor.editorUpload.blobCache.create(file.name, file, base64);
+                        tinymce.activeEditor.editorUpload.blobCache.add(blobInfo);
+                        cb(blobInfo.blobUri(), { title: file.name });
+                    });
+                    reader.readAsDataURL(file);
+                });
+                input.click(); 
+            },
+            
+            content_style: `
+                body { font-family: 'Inter', sans-serif; font-size: 16px; color: #1f2937; line-height: 1.6; }
+                p { margin: 0 0 8px 0; }
+                img { max-width: 100%; height: auto; border-radius: 8px; cursor: se-resize; }
+                table { border-collapse: collapse; width: 100%; }
+                td, th { border: 1px dashed #ccc; padding: 8px; }
+            `,
+            
+            setup: (editor) => {
+                // TẠO MENU CÔNG THỨC TOÁN HỌC (LATEX)
+                editor.ui.registry.addMenuButton('math_templates', {
+                    text: '∑ Toán Học',
+                    tooltip: 'Chèn nhanh công thức Toán học',
+                    fetch: (callback) => {
+                        const items = [
+                            { type: 'menuitem', text: '1. Phân số (a/b)', onAction: () => editor.insertContent('\\( \\frac{a}{b} \\) ') },
+                            { type: 'menuitem', text: '2. Lũy thừa / Mũ (x²)', onAction: () => editor.insertContent('\\( x^2 \\) ') },
+                            { type: 'menuitem', text: '3. Chỉ số dưới (x₁)', onAction: () => editor.insertContent('\\( x_1 \\) ') },
+                            { type: 'menuitem', text: '4. Căn bậc hai (√x)', onAction: () => editor.insertContent('\\( \\sqrt{x} \\) ') },
+                            { type: 'menuitem', text: '5. Căn bậc n (ⁿ√x)', onAction: () => editor.insertContent('\\( \\sqrt[n]{x} \\) ') },
+                            { type: 'menuitem', text: '6. Tích phân (∫)', onAction: () => editor.insertContent('\\( \\int_{a}^{b} f(x) dx \\) ') },
+                            { type: 'menuitem', text: '7. Giới hạn (lim)', onAction: () => editor.insertContent('\\( \\lim_{x \\to \\infty} f(x) \\) ') },
+                            { type: 'menuitem', text: '8. Tổng Sigma (∑)', onAction: () => editor.insertContent('\\( \\sum_{i=1}^{n} x_i \\) ') },
+                            { type: 'menuitem', text: '9. Vector (v)', onAction: () => editor.insertContent('\\( \\vec{v} \\) ') },
+                            { type: 'menuitem', text: '10. Ký hiệu Góc', onAction: () => editor.insertContent('\\( \\widehat{ABC} \\) ') },
+                            { type: 'menuitem', text: '11. Thuộc / Không thuộc', onAction: () => editor.insertContent('\\( \\in \\) / \\( \\notin \\) ') },
+                            { type: 'menuitem', text: '12. Hệ phương trình', onAction: () => editor.insertContent('<p>$$ \\begin{cases} x + y = 1 \\\\ x - y = 0 \\end{cases} $$</p>') },
+                            { type: 'menuitem', text: '13. Ma trận 2x2', onAction: () => editor.insertContent('<p>$$ \\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix} $$</p>') },
+                        ];
+                        callback(items);
+                    }
+                });
+
+                this.editor = editor;
+                
+                editor.on('init', () => {
+                    editor.setContent(this.modelValue || '');
+                });
+
+                editor.on('change keyup paste undo redo', () => {
+                    this.$emit('update:modelValue', editor.getContent());
+                });
+            }
+        });
+    },
+    watch: {
+        modelValue(newVal) {
+            if (this.editor && newVal !== this.editor.getContent()) {
+                this.editor.setContent(newVal || '');
+            }
+        }
+    },
+    beforeUnmount() {
+        if (this.editor) {
+            this.editor.remove(); // Tránh tràn bộ nhớ
+        }
+    }
+};
+
+// ĐĂNG KÝ COMPONENT VÀ CHẠY ỨNG DỤNG
+app.component('rich-text-editor', RichTextEditor);
+app.mount('#app');

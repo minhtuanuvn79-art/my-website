@@ -11,6 +11,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="style.css">
     <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/3413/3413535.png">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tinymce/7.1.0/tinymce.min.js" referrerpolicy="origin"></script>
     <script>
         MathJax = {
             tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']], processEscapes: true },
@@ -47,7 +48,7 @@
                 
                 <div class="mb-12 relative z-10 w-full mt-auto">
                     <span class="text-blue-500 font-black text-xl tracking-widest uppercase mb-6 block">Câu {{ currentSlide + 1 }} / {{ currentExam?.questions?.length }}</span>
-                    <h3 class="text-4xl md:text-5xl font-bold leading-tight">{{ currentExam.questions[currentSlide].text }}</h3>
+                    <h3 class="text-3xl md:text-4xl font-bold leading-tight prose-content" style="padding:0; overflow-y:visible;" v-html="currentExam.questions[currentSlide].text"></h3>
                 </div>
                 
                 <div v-if="currentExam.questions[currentSlide].type === 'mc' || currentExam.questions[currentSlide].type === 'tf'" class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full text-left relative z-10 mb-auto">
@@ -734,8 +735,16 @@
                 </div>
             </div>
 
-            <textarea v-model="newExam.questions[q.originalIdx].text" rows="2" class="w-full bg-transparent border-none focus:ring-0 text-lg font-bold text-gray-800 placeholder-gray-300 resize-none" placeholder="Nhập nội dung câu hỏi..."></textarea>
-
+<div class="mt-2 mb-4">
+    <rich-text-editor v-model="newExam.questions[q.originalIdx].text" placeholder="Nhập nội dung câu hỏi (Hỗ trợ in đậm, màu chữ, hình ảnh...)"></rich-text-editor>
+    
+    <div v-if="newExam.questions[q.originalIdx].text" class="mt-4 p-5 bg-blue-50/30 border-2 border-dashed border-blue-200 rounded-xl relative shadow-inner transition-all">
+        <div class="absolute -top-3 left-4 bg-blue-100 text-blue-700 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest border border-blue-200 shadow-sm">
+            👁️ Xem trước hiển thị
+        </div>
+        <div class="prose-content text-gray-800 font-medium overflow-x-auto mt-1" v-html="newExam.questions[q.originalIdx].text"></div>
+    </div>
+</div>
             <div class="mt-4">
     <div v-if="q.type === 'mc'" class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div v-for="(opt, oIdx) in q.options" :key="oIdx" class="flex items-center gap-3 p-3 bg-white rounded-xl border border-gray-100">
@@ -771,11 +780,18 @@
     </div>
 </div>
 
-                        <div v-if="newExam.type === 'essay'" class="border-t border-gray-100 pt-6 animate-fadeIn">
-                            <h3 class="font-bold text-lg text-gray-800 mb-2">Đề bài tự luận chung</h3>
-                            <p class="text-xs text-gray-500 mb-3 font-medium italic">Học sinh sẽ đọc nội dung dưới đây và tải lên tệp bài làm duy nhất.</p>
-                            <textarea v-model="newExam.essayContent" rows="8" class="w-full px-5 py-4 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:outline-none bg-gray-50 font-medium text-gray-700 shadow-inner" placeholder="Nhập chi tiết yêu cầu đề bài..."></textarea>
-                        </div>
+<div v-if="newExam.type === 'essay'" class="border-t border-gray-100 pt-6 animate-fadeIn">
+    <h3 class="font-bold text-lg text-gray-800 mb-2">Đề bài tự luận chung</h3>
+    <p class="text-xs text-gray-500 mb-3 font-medium italic">Học sinh sẽ đọc nội dung dưới đây và tải lên tệp bài làm duy nhất.</p>
+    <rich-text-editor v-model="newExam.essayContent" placeholder="Nhập chi tiết yêu cầu đề bài tự luận..."></rich-text-editor>
+    
+    <div v-if="newExam.essayContent" class="mt-4 p-5 bg-blue-50/30 border-2 border-dashed border-blue-200 rounded-xl relative shadow-inner">
+        <div class="absolute -top-3 left-4 bg-blue-100 text-blue-700 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest border border-blue-200 shadow-sm">
+            👁️ Xem trước hiển thị
+        </div>
+        <div class="prose-content text-gray-800 font-medium overflow-x-auto mt-1" v-html="newExam.essayContent"></div>
+    </div>
+</div>
                     </div>
                 </div>
 
@@ -879,7 +895,7 @@
                         <span class="flex-shrink-0 w-10 h-10 md:w-12 md:h-12 bg-blue-50 border-2 border-blue-600 text-blue-600 rounded-xl md:rounded-2xl flex items-center justify-center font-black text-lg md:text-xl shadow-sm">
                             {{ idx + 1 }}
                         </span>
-                        <div class="text-lg md:text-xl font-bold text-gray-800 leading-relaxed pt-1 break-words w-full min-w-0 overflow-x-auto whitespace-pre-wrap">{{ q.text }}</div>
+                        <div class="text-lg md:text-xl font-bold text-gray-800 leading-relaxed pt-1 break-words w-full min-w-0 overflow-x-auto prose-content" style="padding:0; font-family: inherit;" v-html="q.text"></div>
                     </div>
 
                     <div class="ml-0 md:ml-16">
