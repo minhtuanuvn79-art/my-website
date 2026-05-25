@@ -551,21 +551,21 @@ const filteredUsers = computed(() => {
     return result;
 });
 // Thêm vào trong phần setup() của Vue app trong app.js
-const getOffset = (type) => {
-    if (!printData.value || !printData.value.questions) return 0;
-    if (type === 'mc') return printData.value.questions.filter(q => q.type === 'mc').length;
+const getOffset = (type, pData) => {
+    if (!pData || !pData.questions) return 0;
+    if (type === 'mc') return pData.questions.filter(q => q.type === 'mc').length;
     return 0;
 };
 
-const getTfScore = (idx, q) => {
-    const studentAns = printData.value.studentAnswersLog[idx + getOffset('mc')];
+const getTfScore = (idx, q, pData) => {
+    const studentAns = pData.studentAnswersLog[idx + getOffset('mc', pData)];
     if (!studentAns || !studentAns.choice) return 0;
     
     let match = 0;
     for (let i = 0; i < 4; i++) {
         if (studentAns.choice[i] === q.correct[i]) match++;
     }
-    const scale = [0, 0.1, 0.25, 0.5, 1.0]; // Thang điểm chuẩn
+    const scale = currentExam.value?.settings?.tfGradingScale || [0, 0.1, 0.25, 0.5, 1.0]; 
     return (scale[match] * (q.points || 1)).toFixed(2);
 };
 
@@ -742,7 +742,11 @@ const openCreateNewExam = () => {
             }
         };
 
-        const viewResults = (id) => { currentExam.value = exams.value.find(e => e.id === id); view.value = 'view-results'; };
+const viewResults = (id) => { 
+    currentExam.value = exams.value.find(e => e.id === id); 
+    selectedResults.value = []; // Bổ sung dòng này
+    view.value = 'view-results'; 
+};
         const deleteResult = async (id) => {
     if (!confirm("Bạn có chắc chắn muốn xóa vĩnh viễn kết quả bài làm này không? Hành động này không thể hoàn tác và sẽ giải phóng dung lượng CSDL.")) {
         return;
@@ -764,6 +768,80 @@ const openCreateNewExam = () => {
     } catch (err) {
         console.error("Lỗi hệ thống khi xóa kết quả:", err);
         showNotify("Không thể kết nối hệ thống", "error");
+    }
+};
+// --- STATE & HÀM XÓA HÀNG LOẠT BÀI THI ---
+const selectedResults = ref([]);
+const showBulkDeleteResultConfirm = ref(false);
+
+const toggleSelectAllResults = (event) => {
+    if (event.target.checked) {
+        selectedResults.value = filteredResults.value.map(r => r.id);
+    } else {
+        selectedResults.value = [];
+    }
+};
+
+const confirmBulkDeleteResults = async () => {
+    if (selectedResults.value.length === 0) return;
+
+    try {
+        const { error } = await supabaseClient
+            .from('results')
+            .delete()
+            .in('id', selectedResults.value);
+
+        if (!error) {
+            // Cập nhật lại danh sách tổng
+            allResults.value = allResults.value.filter(r => !selectedResults.value.includes(r.id));
+            showNotify(`Đã xóa thành công ${selectedResults.value.length} bài thi.`);
+            selectedResults.value = []; // Reset danh sách chọn
+            showBulkDeleteResultConfirm.value = false;
+        } else {
+            showNotify("Lỗi xóa hàng loạt: " + error.message, "error");
+        }
+    } catch (err) {
+        showNotify("Lỗi kết nối hệ thống", "error");
+    }
+};
+// --- STATE & HÀM XÓA HÀNG LOẠT ĐỀ THI ---
+const selectedExams = ref([]);
+const showBulkDeleteExamConfirm = ref(false);
+
+const toggleSelectAllExams = (event) => {
+    if (event.target.checked) {
+        selectedExams.value = filteredExams.value.map(e => e.id);
+    } else {
+        selectedExams.value = [];
+    }
+};
+
+const confirmBulkDeleteExams = async () => {
+    if (selectedExams.value.length === 0) return;
+
+    try {
+        // Xóa toàn bộ kết quả bài làm của học sinh thuộc các đề này trước (tránh lỗi khóa ngoại CSDL)
+        await supabaseClient.from('results').delete().in('examId', selectedExams.value);
+        
+        // Sau đó xóa các đề thi
+        const { error } = await supabaseClient
+            .from('exams')
+            .delete()
+            .in('id', selectedExams.value);
+
+        if (!error) {
+            // Cập nhật lại giao diện
+            exams.value = exams.value.filter(e => !selectedExams.value.includes(e.id));
+            allResults.value = allResults.value.filter(r => !selectedExams.value.includes(r.examId));
+            
+            showNotify(`Đã xóa vĩnh viễn ${selectedExams.value.length} đề thi và các kết quả liên quan.`);
+            selectedExams.value = []; 
+            showBulkDeleteExamConfirm.value = false;
+        } else {
+            showNotify("Lỗi xóa hàng loạt đề thi: " + error.message, "error");
+        }
+    } catch (err) {
+        showNotify("Lỗi kết nối hệ thống", "error");
     }
 };
 const filteredResults = computed(() => {
@@ -1709,7 +1787,7 @@ const exportToExcel = () => {
 };
 // --- STATE MỚI CHO CHỨC NĂNG IN ---
 const showPrintModal = ref(false);
-const printData = ref(null); // Lưu trữ bản sao kết quả để chỉnh sửa trước khi in
+const printDataList = ref([]);
 // --- STATE CHO LỊCH SỬ LÀM BÀI ---
 const showHistoryModal = ref(false);
 const studentHistory = ref([]);
@@ -1727,26 +1805,82 @@ const openStudentHistory = (studentName, examId) => {
 // Hàm mở modal in và chuẩn bị dữ liệu
 const openPrintPreview = (result) => {
     const exam = exams.value.find(e => e.id === result.examId);
-    // Tạo bản sao sâu để chỉnh sửa không ảnh hưởng đến Database
-    printData.value = {
+    printDataList.value = [{
         ...JSON.parse(JSON.stringify(result)),
         examTitle: exam?.title || 'BÀI KIỂM TRA',
         questions: exam?.questions || []
-    };
+    }];
     showPrintModal.value = true;
 };
-
-// Hàm xuất PDF từ HTML
+const openBulkPrintPreview = () => {
+    if (selectedResults.value.length === 0) return;
+    
+    const exam = currentExam.value;
+    const resultsToPrint = filteredResults.value.filter(r => selectedResults.value.includes(r.id));
+    
+    printDataList.value = resultsToPrint.map(res => ({
+        ...JSON.parse(JSON.stringify(res)),
+        examTitle: exam?.title || 'BÀI KIỂM TRA',
+        questions: exam?.questions || []
+    }));
+    
+    showPrintModal.value = true;
+};
+// Hàm xuất PDF (Tuyệt chiêu dùng Native Print - Khắc phục 100% lỗi trắng trang)
 const exportToPDF = () => {
-    const element = document.getElementById('printable-sheet');
-    const opt = {
-        margin: 0,
-        filename: `Phieu_Ket_Qua_${printData.value.studentName}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    showNotify("Đang mở trình xuất PDF... Vui lòng chọn 'Lưu dưới dạng PDF' (Save as PDF) nhé!", "success");
+    
+    // 1. Lấy phần tử chứa nội dung in và vùng bọc app
+    const printElement = document.getElementById('printable-sheet');
+    const appElement = document.getElementById('app');
+    
+    // 2. Ghi nhớ vị trí cũ của phiếu in trong cấu trúc HTML
+    const originalParent = printElement.parentNode;
+    const originalNextSibling = printElement.nextSibling;
+    const originalStyle = printElement.getAttribute('style') || '';
+    
+    // Hàm dọn dẹp, khôi phục lại giao diện trang web sau khi xuất PDF xong
+    let isRestored = false;
+    const restoreUI = () => {
+        if (isRestored) return;
+        isRestored = true;
+        
+        // Lắp ráp phiếu in về lại đúng vị trí trong Modal
+        printElement.setAttribute('style', originalStyle);
+        if (originalNextSibling) {
+            originalParent.insertBefore(printElement, originalNextSibling);
+        } else {
+            originalParent.appendChild(printElement);
+        }
+        
+        // Hiện lại toàn bộ trang web
+        appElement.style.display = '';
     };
-    html2pdf().set(opt).from(element).save();
+
+    // Lắng nghe sự kiện ngay khi cửa sổ xuất file PDF đóng lại
+    window.addEventListener('afterprint', restoreUI, { once: true });
+    
+    // 3. ẨN toàn bộ ứng dụng (Đây là bước cởi trói hoàn toàn khỏi Modal của Tailwind)
+    appElement.style.display = 'none';
+    
+    // 4. Đưa phiếu in ra thẳng ngoài cùng của trang web
+    document.body.appendChild(printElement);
+    
+    // 5. Trải phẳng kích thước đúng chuẩn A4
+    printElement.style.position = 'absolute';
+    printElement.style.left = '0';
+    printElement.style.top = '0';
+    printElement.style.width = '210mm'; 
+    printElement.style.backgroundColor = '#ffffff';
+    printElement.style.margin = '0';
+
+    // 6. Gọi lệnh in của trình duyệt (Mở hộp thoại Save as PDF)
+    setTimeout(() => {
+        window.print();
+        
+        // Fallback dự phòng: Nếu máy nào không bắt được sự kiện afterprint thì sau 2 giây cũng tự khôi phục
+        setTimeout(restoreUI, 2000);
+    }, 500);
 };
 // Thêm vào cùng nhóm với các ref khác như users, exams...
 
@@ -1866,6 +2000,14 @@ const openLiveMonitor = (exam) => {
     examRoomChannel.subscribe();
 };
 return {
+    selectedExams,
+    showBulkDeleteExamConfirm,
+    toggleSelectAllExams,
+    confirmBulkDeleteExams,
+    selectedResults,
+    showBulkDeleteResultConfirm,
+    toggleSelectAllResults,
+    confirmBulkDeleteResults,
     liveMonitors,
     openLiveMonitor,
     selectedSubjectFilter,
@@ -1891,12 +2033,13 @@ return {
     toggleSelectAll,
     showBulkDeleteConfirm,
     selectedUsers,
-    showDeleteConfirm, // PHẢI THÊM DÒNG NÀY
-    userToDelete,      // PHẢI THÊM DÒNG NÀY
+    showDeleteConfirm,
+    userToDelete,
     confirmDeleteUser,
     exportToPDF,
     openPrintPreview,
-    printData,
+    openBulkPrintPreview,
+    printDataList,
     showPrintModal,
     exportToExcel,
     showFullscreenOverlay,
