@@ -154,8 +154,11 @@ const generateFromBank = () => {
 };
 // --- THƯ VIỆN ĐỀ THI CHUNG (CHỢ ĐỀ THI) ---
 const publicExams = computed(() => {
-    // Tạm thời xóa điều kiện e.creator !== currentUser.value?.name
-    return exams.value.filter(e => e.settings?.isPublic === true);
+    // Lọc các đề được Public VÀ KHÔNG PHẢI do chính mình tạo ra
+    return exams.value.filter(e => 
+        e.settings?.isPublic === true && 
+        e.creator !== currentUser.value?.name
+    );
 });
 
 const cloneExam = async (examTemplate) => {
@@ -191,8 +194,10 @@ const cloneExam = async (examTemplate) => {
 const searchExam = ref('');
 const searchResultQuery = ref(''); // Biến lưu từ khóa tìm kiếm học sinh
 const filteredExams = computed(() => {
-    // 1. CHỈ HIỆN ĐỀ BÊN NGOÀI (Lọc bỏ các đề đã cất vào Kho lưu trữ - có folderId)
-    let result = exams.value.filter(exam => !exam.settings?.folderId);
+    // 1. CHỈ HIỆN ĐỀ CỦA CHÍNH MÌNH TẠO RA & ĐỀ BÊN NGOÀI (Lọc bỏ các đề đã cất vào Kho lưu trữ)
+    let result = exams.value.filter(exam => 
+        exam.creator === currentUser.value?.name && !exam.settings?.folderId
+    );
 
     // 2. Lọc theo từ khóa (Tìm tên đề thi trên thanh tìm kiếm)
     if (searchExam.value.trim()) {
@@ -320,7 +325,8 @@ const createFolder = async () => {
     
     const newFolder = { 
         id: Date.now().toString(), 
-        name: newFolderName.value.trim() 
+        name: newFolderName.value.trim(),
+        creator: currentUser.value?.name // <-- THÊM DÒNG NÀY ĐỂ LƯU NGƯỜI TẠO THƯ MỤC
     };
 
     // Đẩy lên Supabase
@@ -335,7 +341,10 @@ const createFolder = async () => {
         showNotify("Lỗi CSDL: " + error.message, "error");
     }
 };
-
+// TỰ ĐỘNG LỌC: Chỉ hiển thị các thư mục do chính tài khoản này tạo ra
+const filteredFolders = computed(() => {
+    return folders.value.filter(f => f.creator === currentUser.value?.name);
+});
 // Hàm xóa thư mục (Xóa trên Database)
 const deleteFolder = async (id) => {
     if(confirm("Xóa thư mục này? Các đề bên trong sẽ được trả về màn hình chính.")) {
@@ -377,10 +386,13 @@ const moveExamToFolder = async (exam, folderId) => {
     }
 };
 
-// Lọc các đề thi nằm TRONG thư mục đang mở
+// Lọc các đề thi nằm TRONG thư mục đang mở VÀ do chính mình tạo
 const archivedExams = computed(() => {
     if (!activeFolderId.value) return [];
-    return exams.value.filter(e => e.settings?.folderId === activeFolderId.value);
+    return exams.value.filter(e => 
+        e.settings?.folderId === activeFolderId.value && 
+        e.creator === currentUser.value?.name
+    );
 });
         // ==========================================
         // HÀM HỆ THỐNG VÀ XỬ LÝ CHUNG
@@ -407,6 +419,9 @@ const handleVisibilityChange = () => {
         
         // --- THÊM DÒNG NÀY ĐỂ CHẶN ĐẾM TRÙNG ---
         if (showFullscreenOverlay.value) return;
+        
+        // NGĂN CHẶN PHẠT KHI ĐANG HỎI XÁC NHẬN NỘP BÀI
+        if (isConfirmingSubmit.value) return; 
 
         if (currentExam.value?.settings?.autoMonitor !== false) {
             cheatWarnings.value++;
@@ -470,10 +485,13 @@ const handleFullscreenChange = () => {
         if (!isFull && !isExamStarting.value) {
             if (isAIGradingSubmission.value) return;
             if (showFullscreenOverlay.value) return;
+            
+            // NGĂN CHẶN PHẠT KHI ĐANG HỎI XÁC NHẬN NỘP BÀI HOẶC BẤM HỦY
+            if (isConfirmingSubmit.value) return; 
 
             // NẾU LÀ ĐIỆN THOẠI -> KHÔNG PHẠT LỖI FULLSCREEN NỮA!
             if (isMobile) {
-                return; // Thoát luôn, không báo vi phạm.
+                return; 
             }
 
             setTimeout(() => {
@@ -482,7 +500,8 @@ const handleFullscreenChange = () => {
                                      document.mozFullScreenElement || 
                                      document.msFullscreenElement);
                 
-                if (!reCheckFull) {
+                // KIỂM TRA LẠI LẦN NỮA TRONG SETTIMEOUT CHO CHẮC CHẮN
+                if (!reCheckFull && !isConfirmingSubmit.value) {
                     cheatWarnings.value++;
                     sendRealtimeUpdate();
                     cheatMessage.value = `Bạn vừa thoát khỏi chế độ Toàn màn hình (Fullscreen). Vui lòng quay lại để tiếp tục bài thi.`;
@@ -1278,9 +1297,9 @@ const handleAiFileUpload = async (event) => {
             img.onload = () => {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
-const scale = Math.min(1000 / img.width, 1);
-canvas.width = img.width * scale;
-canvas.height = img.height * scale;
+                const scale = Math.min(1000 / img.width, 1);
+                canvas.width = img.width * scale;
+                canvas.height = img.height * scale;
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 
                 const compressedBase64 = canvas.toDataURL('image/jpeg', 0.5);
@@ -1308,7 +1327,7 @@ canvas.height = img.height * scale;
                 let maxWidth = 0;
                 const canvases = [];
                 
-                // Đọc TOÀN BỘ trang thay vì giới hạn 4 trang như trước
+                // Đọc TOÀN BỘ trang
                 const numPages = pdf.numPages; 
                 
                 for (let i = 1; i <= numPages; i++) {
@@ -1337,8 +1356,8 @@ canvas.height = img.height * scale;
                     currentY += canvas.height;
                 }
 
-const base64Img = finalCanvas.toDataURL('image/jpeg', 0.1); 
-aiImageBase64.value = base64Img.split(',')[1];
+                const base64Img = finalCanvas.toDataURL('image/jpeg', 0.1); 
+                aiImageBase64.value = base64Img.split(',')[1];
                 
                 showNotify(`Đã chuẩn bị xong ${numPages} trang PDF!`);
             } catch(err) {
@@ -1348,8 +1367,7 @@ aiImageBase64.value = base64Img.split(',')[1];
         reader.readAsArrayBuffer(file);
     } 
     
-    // XỬ LÝ WORD (DOCX)
-// XỬ LÝ WORD (DOCX) - NÂNG CẤP TỰ ĐỘNG BẮT ẢNH
+    // XỬ LÝ WORD (DOCX) - NÂNG CẤP TỰ ĐỘNG BẮT ẢNH VÀ KHÔNG BỊ CỘNG DỒN
     else if (fileExt === 'docx') {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -1386,7 +1404,8 @@ aiImageBase64.value = base64Img.split(',')[1];
                 txt.innerHTML = cleanText;
                 cleanText = txt.value;
 
-                aiPrompt.value = cleanText + "\n\n" + aiPrompt.value; 
+                // --- SỬA THÀNH GHI ĐÈ ĐỂ KHÔNG BỊ TRÙNG ĐỀ CŨ ---
+                aiPrompt.value = cleanText; 
                 showNotify(`Đã trích xuất chữ và tự động giữ lại ${images.length} hình ảnh từ Word!`); 
             })
             .catch(err => showNotify("Lỗi đọc Word: " + err.message, "error"));
@@ -1406,7 +1425,6 @@ const handleGenerateAI = async () => {
 
     try {
         // 1. NÂNG CẤP PROMPT: Ép AI tách biệt tuyệt đối Câu hỏi và Đáp án
-// 1. NÂNG CẤP PROMPT: Ép AI tách biệt tuyệt đối Câu hỏi và Đáp án
         const strictPrompt = `Bóc tách đề thi sau thành mảng JSON câu hỏi. 
 
         LƯU Ý CỰC KỲ QUAN TRỌNG VỀ PHÂN LOẠI CÂU HỎI (BẮT BUỘC TUÂN THỦ):
@@ -1481,7 +1499,7 @@ const handleGenerateAI = async () => {
         const cleanJson = rawJson.replace(/```json/gi, '').replace(/```/g, '').trim();
         let questions = JSON.parse(cleanJson);
 
-// Hàm BẢO VỆ THẺ HTML (Dành riêng cho TinyMCE - Câu hỏi và Giải thích)
+        // Hàm BẢO VỆ THẺ HTML (Dành riêng cho TinyMCE - Câu hỏi và Giải thích)
         const safeEncodeHTML = (str) => {
             if (typeof str !== 'string') return str;
             let raw = str.replace(/&lt;/g, '<').replace(/&gt;/g, '>');
@@ -1501,7 +1519,7 @@ const handleGenerateAI = async () => {
             return str.replace(/\n/g, '<br>');
         };
 
-// 2. CHUẨN HÓA CẤU TRÚC VÀ PHỤC HỒI HÌNH ẢNH
+        // 2. CHUẨN HÓA CẤU TRÚC VÀ PHỤC HỒI HÌNH ẢNH
         questions = questions.map(q => {
             if (q.text) q.text = formatLineBreaks(safeEncodeHTML(q.text));
             if (q.explanation) q.explanation = formatLineBreaks(safeEncodeHTML(q.explanation));
@@ -1562,8 +1580,14 @@ const handleGenerateAI = async () => {
 
         showNotify(`Thành công! Đã bóc tách ${questions.length} câu.`);
         view.value = 'create-exam'; 
+
+        // --- RESET DỮ LIỆU AI SAU KHI TẠO XONG ĐỂ KHÔNG BỊ CHỒNG CHÉO ---
+        aiPrompt.value = '';
+        aiUploadedImage.value = null;
+        aiImageBase64.value = '';
+        aiUploadedFileName.value = '';
         
-} catch (err) { 
+    } catch (err) { 
         console.error("Lỗi AI:", err);
         showNotify("Lỗi: " + (err.message || "Đã xảy ra lỗi không xác định"), "error"); 
     } finally { 
@@ -2560,6 +2584,7 @@ return {
 downloadQrCode,
     copyExamLink,
     folders,
+    filteredFolders,
     showFolderModal,
     newFolderName,
     activeFolderId,

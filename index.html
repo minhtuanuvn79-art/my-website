@@ -681,8 +681,8 @@
             </div>
             
             <div class="space-y-2">
-                <div v-for="folder in folders" :key="folder.id" 
-                     @click="activeFolderId = folder.id"
+<div v-for="folder in filteredFolders" :key="folder.id" 
+     @click="activeFolderId = folder.id"
                      :class="activeFolderId === folder.id ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-gray-50 border-gray-100 text-gray-600 hover:border-gray-300'"
                      class="p-3 rounded-xl border flex justify-between items-center cursor-pointer transition">
                     <span class="font-bold flex items-center gap-2">📁 {{ folder.name }}</span>
