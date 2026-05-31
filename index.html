@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="style.css">
     <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/3413/3413535.png">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tinymce/7.1.0/tinymce.min.js" referrerpolicy="origin"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         MathJax = {
             tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']], processEscapes: true },
@@ -401,6 +402,12 @@
                         <button @click="teacherTab = 'ai-creator'" :class="teacherTab === 'ai-creator' ? 'bg-purple-600 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'" class="px-5 py-2.5 rounded-xl font-bold transition flex items-center gap-2">
                             <span>🧠</span> AI Soạn Đề
                         </button>
+ <button @click="teacherTab = 'archive'" :class="teacherTab === 'archive' ? 'bg-orange-500 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'" class="px-5 py-2.5 rounded-xl font-bold transition flex items-center gap-2">
+    <span>📁</span> Kho Lưu Trữ
+</button>
+<button @click="teacherTab = 'public-library'" :class="teacherTab === 'public-library' ? 'bg-green-600 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'" class="px-5 py-2.5 rounded-xl font-bold transition flex items-center gap-2">
+    <span>🌍</span> Chợ Đề Thi
+</button>
                     </div>
 
 <div v-if="teacherTab === 'exams'" class="animate-fadeIn space-y-6">
@@ -434,9 +441,10 @@
     </button>
 </div>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-<div v-for="exam in filteredExams" :key="exam.id" 
+<div v-for="exam in paginatedExams" :key="exam.id" 
+     @contextmenu.prevent="openContextMenu($event, exam)"
      :class="selectedExams.includes(exam.id) ? 'ring-2 ring-blue-500 bg-blue-50/30' : 'bg-white'" 
-     class="p-6 rounded-2xl shadow-sm border border-gray-100 exam-card flex flex-col transition-all">
+     class="p-6 rounded-2xl shadow-sm border border-gray-100 exam-card flex flex-col transition-all relative">
     
     <div class="flex justify-between items-start mb-3">
         <span :class="exam.type === 'essay' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'" class="px-3 py-1 text-xs font-bold rounded-lg uppercase tracking-wide">
@@ -447,12 +455,15 @@
     
     <h3 class="text-xl font-bold text-gray-800 mb-2 line-clamp-2">{{ exam.title }}</h3>
     
-    <div v-if="exam.examCode" class="mt-2 mb-3 bg-gray-50 p-3 rounded-xl border border-gray-200 border-dashed flex justify-between items-center transition hover:border-blue-300">
+<div v-if="exam.examCode" class="mt-2 mb-3 bg-gray-50 p-3 rounded-xl border border-gray-200 border-dashed flex justify-between items-center transition hover:border-blue-300">
         <div>
             <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">Mã phòng thi</span>
             <span class="font-black text-blue-600 tracking-widest text-lg">{{ exam.examCode }}</span>
         </div>
-        <button @click="openQrModal(exam)" class="w-10 h-10 bg-white rounded-lg shadow-sm border border-gray-200 flex items-center justify-center text-xl hover:scale-105 hover:text-blue-600 transition" title="Mở mã QR">📱</button>
+        <div class="flex gap-2">
+            <button @click="copyExamLink(exam.examCode)" class="w-10 h-10 bg-white rounded-lg shadow-sm border border-gray-200 flex items-center justify-center text-xl hover:scale-105 hover:text-blue-600 transition" title="Copy link gửi học sinh">🔗</button>
+            <button @click="openQrModal(exam)" class="w-10 h-10 bg-white rounded-lg shadow-sm border border-gray-200 flex items-center justify-center text-xl hover:scale-105 hover:text-blue-600 transition" title="Mở mã QR">📱</button>
+        </div>
     </div>
 
     <p class="text-sm text-gray-500 mb-6 flex items-center gap-2">
@@ -518,6 +529,33 @@
             <p class="text-gray-400 font-bold">Không tìm thấy đề thi nào khớp với "{{ searchExam }}"</p>
         </div>
     </div>
+<div v-if="filteredExams.length > 6" class="mt-8 flex items-center justify-center gap-2 border-t border-gray-200 pt-6 animate-fadeIn">
+    <button @click="currentExamPage = 1" :disabled="currentExamPage === 1" 
+            class="px-4 py-2 rounded-xl bg-white border border-gray-200 font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm">
+        ⏮️ Đầu
+    </button>
+    
+    <button @click="currentExamPage--" :disabled="currentExamPage === 1" 
+            class="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm">
+        ⬅️
+    </button>
+
+    <div class="px-4 py-2 rounded-xl bg-blue-50 border border-blue-100">
+        <span class="text-sm font-black text-blue-700">
+            Trang {{ currentExamPage }} / {{ totalExamPages }}
+        </span>
+    </div>
+
+    <button @click="currentExamPage++" :disabled="currentExamPage === totalExamPages" 
+            class="w-10 h-10 flex items-center justify-center rounded-xl bg-white border border-gray-200 font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm">
+        ➡️
+    </button>
+
+    <button @click="currentExamPage = totalExamPages" :disabled="currentExamPage === totalExamPages" 
+            class="px-4 py-2 rounded-xl bg-white border border-gray-200 font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm">
+        Cuối ⏭️
+    </button>
+</div>
 </div> <div v-if="teacherTab === 'monitor'" class="animate-fadeIn mt-6">
     <div class="mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-gray-200 pb-6">
         <div>
@@ -634,6 +672,133 @@
                             </div>
                         </div>
                     </div>
+<div v-if="teacherTab === 'archive'" class="animate-fadeIn space-y-6">
+    <div class="flex gap-4">
+        <div class="w-1/3 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-max">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="font-black text-gray-800">Thư Mục</h3>
+                <button @click="showFolderModal = true" class="bg-gray-100 hover:bg-gray-200 text-gray-700 w-8 h-8 rounded-lg font-bold transition">+</button>
+            </div>
+            
+            <div class="space-y-2">
+                <div v-for="folder in folders" :key="folder.id" 
+                     @click="activeFolderId = folder.id"
+                     :class="activeFolderId === folder.id ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-gray-50 border-gray-100 text-gray-600 hover:border-gray-300'"
+                     class="p-3 rounded-xl border flex justify-between items-center cursor-pointer transition">
+                    <span class="font-bold flex items-center gap-2">📁 {{ folder.name }}</span>
+                    <button @click.stop="deleteFolder(folder.id)" class="text-red-400 hover:text-red-600">✕</button>
+                </div>
+                
+                <div v-if="folders.length === 0" class="text-center py-8 text-gray-400 text-sm font-medium border-2 border-dashed rounded-xl">
+                    Chưa có thư mục nào
+                </div>
+            </div>
+        </div>
+
+        <div class="w-2/3">
+            <div v-if="!activeFolderId" class="bg-white p-10 rounded-2xl shadow-sm border border-gray-100 text-center text-gray-400 font-bold">
+                <span class="text-4xl block mb-2">📂</span>
+                Hãy chọn một thư mục để xem đề thi
+            </div>
+            
+            <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div v-for="exam in archivedExams" :key="exam.id" class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col opacity-80 hover:opacity-100 transition">
+                    <h4 class="font-bold text-gray-800 mb-2">{{ exam.title }}</h4>
+                    <p class="text-xs text-gray-500 mb-4">Mã phòng: {{ exam.examCode || '---' }}</p>
+                    <button @click="moveExamToFolder(exam, null)" class="mt-auto bg-orange-100 hover:bg-orange-500 hover:text-white text-orange-700 font-bold py-2.5 rounded-lg text-sm transition">
+                        Khôi phục ra ngoài ➔
+                    </button>
+                </div>
+                
+                <div v-if="archivedExams.length === 0" class="col-span-full bg-white p-10 rounded-2xl shadow-sm border border-gray-100 text-center text-gray-400 text-sm font-bold border-dashed">
+                    Thư mục này đang trống
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div> 
+
+<div v-if="teacherTab === 'public-library'" class="animate-fadeIn space-y-6 mt-6">
+    <div class="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-3xl p-8 text-white shadow-lg flex items-center justify-between border border-emerald-400">
+        <div>
+            <h3 class="text-3xl font-black mb-2 flex items-center gap-3">🌍 Thư viện Đề thi chung</h3>
+            <p class="text-emerald-50 font-medium">Khám phá và sao chép các đề thi chất lượng do các giáo viên khác chia sẻ.</p>
+        </div>
+        <div class="text-5xl opacity-80 hidden md:block">🤝</div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div v-for="exam in publicExams" :key="exam.id" class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col hover:-translate-y-1 transition-transform duration-300">
+            <div class="flex justify-between items-start mb-4">
+                <span :class="exam.type === 'essay' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'" class="px-3 py-1 text-xs font-bold rounded-lg uppercase tracking-wide">
+                    {{ exam.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm' }}
+                </span>
+                <span class="bg-gray-100 text-gray-600 text-[10px] font-black px-2 py-1 rounded-md uppercase">
+                    Tác giả: {{ exam.creator }}
+                </span>
+            </div>
+            
+            <h4 class="text-lg font-bold text-gray-800 mb-2 line-clamp-2">{{ exam.title }}</h4>
+            
+            <div class="flex items-center gap-4 text-xs font-bold text-gray-500 mb-6">
+                <span class="flex items-center gap-1">⏱ {{ exam.time }} phút</span>
+                <span class="flex items-center gap-1">📋 {{ exam.questions?.length || 0 }} câu hỏi</span>
+            </div>
+
+            <button @click="cloneExam(exam)" class="mt-auto w-full bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white font-bold py-3 rounded-xl transition-colors duration-300 border border-emerald-100 flex items-center justify-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                Sao chép về kho của tôi
+            </button>
+        </div>
+        
+        <div v-if="publicExams.length === 0" class="col-span-full text-center py-20 bg-white rounded-3xl border-2 border-dashed border-gray-100">
+            <span class="text-5xl block mb-4 opacity-50">🍃</span>
+            <p class="text-gray-400 font-bold">Hiện chưa có giáo viên nào chia sẻ đề thi lên chợ.</p>
+        </div>
+    </div>
+</div>
+<div v-if="contextMenu.show" 
+     :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }" 
+     class="fixed z-[999] bg-white rounded-xl shadow-2xl border border-gray-200 py-2 w-56 animate-fadeIn">
+    <div class="px-4 py-2 border-b border-gray-100 mb-1">
+        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest truncate">{{ contextMenu.exam?.title }}</p>
+    </div>
+    <button @click="showMoveModal = true; closeContextMenu()" class="w-full text-left px-5 py-2.5 hover:bg-orange-50 text-sm font-bold text-gray-700 hover:text-orange-600 flex items-center gap-2 transition">
+        📂 Cất vào Kho lưu trữ
+    </button>
+</div>
+
+<div v-if="showFolderModal" class="fixed inset-0 z-[200] flex items-center justify-center p-4 modal-overlay">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-gray-100">
+        <h3 class="text-xl font-black text-gray-800 mb-4">Tạo Thư Mục Mới</h3>
+        <input v-model="newFolderName" type="text" placeholder="Tên thư mục (VD: Đề thi Giữa Kỳ 1)" class="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-blue-500 mb-6 font-medium">
+        <div class="flex gap-2">
+            <button @click="showFolderModal = false" class="flex-1 py-3 bg-gray-100 font-bold rounded-xl text-gray-600 hover:bg-gray-200 transition">Hủy</button>
+            <button @click="createFolder" class="flex-1 py-3 bg-blue-600 font-bold rounded-xl text-white hover:bg-blue-700 transition">Tạo mới</button>
+        </div>
+    </div>
+</div>
+
+<div v-if="showMoveModal" class="fixed inset-0 z-[200] flex items-center justify-center p-4 modal-overlay">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-gray-100 max-h-[80vh] flex flex-col">
+        <h3 class="text-xl font-black text-gray-800 mb-4">Lưu trữ đề thi</h3>
+        <p class="text-xs text-gray-500 mb-4 font-medium">Chọn thư mục để cất đề thi này vào:</p>
+        
+        <div class="flex-1 overflow-y-auto space-y-2 mb-6 pr-1 custom-scrollbar">
+            <button v-for="folder in folders" :key="folder.id" 
+                    @click="moveExamToFolder(contextMenu.exam, folder.id)"
+                    class="w-full text-left p-3 rounded-xl bg-gray-50 hover:bg-orange-50 border border-gray-200 hover:border-orange-300 font-bold text-gray-700 transition flex items-center gap-2">
+                📁 {{ folder.name }}
+            </button>
+            <div v-if="folders.length === 0" class="text-center py-4 text-xs text-gray-400 font-bold">
+                Bạn chưa có thư mục nào. Hãy sang Tab Kho Lưu Trữ để tạo nhé!
+            </div>
+        </div>
+        
+        <button @click="showMoveModal = false" class="w-full py-3 bg-gray-100 font-bold rounded-xl text-gray-600 hover:bg-gray-200 transition mt-auto">Hủy bỏ</button>
+    </div>
+</div>
                 </div>
 
 <div v-if="view === 'create-exam'" class="animate-fadeIn max-w-4xl mx-auto bg-white pb-8 rounded-2xl shadow-sm border border-gray-100 mt-6 relative">
@@ -662,7 +827,14 @@
                     <option v-for="sub in uniqueSubjects" :key="sub" :value="sub"></option>
                 </datalist>
             </div>
-
+<div class="md:col-span-3">
+    <select v-model="newExam.grade" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 font-bold text-gray-700">
+        <option value="">Chọn khối...</option>
+        <option value="10">Khối 10</option>
+        <option value="11">Khối 11</option>
+        <option value="12">Khối 12</option>
+    </select>
+</div>
             <div class="md:col-span-3 flex items-center gap-2 bg-gray-50 px-4 py-1.5 rounded-xl border border-gray-200 shadow-inner">
                 <span class="text-sm font-bold text-gray-500 whitespace-nowrap">Thời gian:</span>
                 <input v-model.number="newExam.time" type="number" class="w-full bg-transparent outline-none font-black text-center text-blue-600 text-lg">
@@ -689,12 +861,24 @@
                 </button>
             </div>
 
-            <button @click="addQuestion()" 
-                    :class="activeQuestionTab === 'mc' ? 'bg-blue-600' : activeQuestionTab === 'tf' ? 'bg-green-600' : 'bg-purple-600'"
-                    class="px-6 py-2.5 rounded-xl text-white font-black text-sm shadow-md hover:opacity-90 transition-all whitespace-nowrap flex items-center gap-2">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
-                Thêm câu hỏi
-            </button>
+<div class="flex flex-wrap items-center gap-3">
+                
+    <label class="px-5 py-2.5 rounded-xl bg-orange-50 text-orange-600 font-black text-sm border border-orange-200 shadow-sm hover:bg-orange-100 hover:text-orange-700 transition-all cursor-pointer flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+        <span>Tải ảnh đính kèm (Nhiều file)</span>
+        <input type="file" multiple accept="image/*" @change="handleAutoAttachImages" class="hidden">
+    </label>
+
+    <button @click="showMatrixGenerator = true" class="px-6 py-2.5 rounded-xl text-white font-black text-sm shadow-md transition-all flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 whitespace-nowrap">
+        🎲 Bốc từ Ngân hàng chung
+    </button>
+    <button @click="addQuestion()" 
+            :class="activeQuestionTab === 'mc' ? 'bg-blue-600' : activeQuestionTab === 'tf' ? 'bg-green-600' : 'bg-purple-600'"
+            class="px-6 py-2.5 rounded-xl text-white font-black text-sm shadow-md hover:opacity-90 transition-all whitespace-nowrap flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
+        Thêm câu hỏi trống
+    </button>
+</div>
         </div>
     </div>
 
@@ -715,7 +899,9 @@
 
         <div v-if="newExam.type === 'quiz'">
             <div class="space-y-6">
-                <div v-for="(q, index) in filteredEditorQuestions" :key="q.originalIdx" class="bg-gray-50 p-6 rounded-[2rem] border border-gray-200 relative group transition-all hover:bg-white hover:shadow-xl">
+<div v-for="(q, index) in filteredEditorQuestions" :key="q.originalIdx" 
+:id="'edit-question-' + q.originalIdx" 
+class="bg-gray-50 p-6 rounded-[2rem] border border-gray-200 relative group transition-all hover:bg-white hover:shadow-xl">
                     <button @click="removeQuestion(q.originalIdx)" class="absolute top-6 right-6 text-red-400 hover:text-red-600 transition">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                     </button>
@@ -782,7 +968,70 @@
             </div>
         </div>
     </div>
+<button v-if="view === 'create-exam' && newExam.type === 'quiz' && newExam.questions.length > 0 && !showEditExamMap"
+        @click="showEditExamMap = true"
+        class="hidden xl:flex fixed left-6 top-24 z-[100] bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg items-center gap-2 transition-all transform hover:scale-105 animate-scaleIn">
+    🗺️ Mở bản đồ đề
+</button>
 
+<div v-if="view === 'create-exam' && newExam.type === 'quiz' && newExam.questions.length > 0 && showEditExamMap" 
+     class="hidden xl:flex fixed left-6 top-24 z-[100] w-[280px] bg-white/95 backdrop-blur-md p-5 rounded-[2rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] border border-gray-200 flex-col transition-all animate-scaleIn">
+    
+    <div class="flex justify-between items-center border-b border-gray-100 pb-4 mb-4">
+        <h3 class="font-black text-gray-800 flex items-center gap-1.5 text-xs uppercase tracking-widest">
+            <span>🗺️</span> BẢN ĐỒ ĐỀ
+        </h3>
+        <div class="flex gap-1.5">
+            <button @click="scrollToTop" class="w-8 h-8 bg-gray-50 hover:bg-blue-50 hover:text-blue-600 rounded-xl flex items-center justify-center text-xs transition-all border border-gray-200" title="Lên đầu trang">
+                ⏫
+            </button>
+            <button @click="scrollToBottom" class="w-8 h-8 bg-gray-50 hover:bg-blue-50 hover:text-blue-600 rounded-xl flex items-center justify-center text-xs transition-all border border-gray-200" title="Xuống Cấu hình / Cuối trang">
+                ⏬
+            </button>
+            <button @click="showEditExamMap = false" class="w-8 h-8 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl flex items-center justify-center text-xs font-black transition-all border border-red-100" title="Ẩn bản đồ đề">
+                ✕
+            </button>
+        </div>
+    </div>
+    
+<!-- Danh sách câu hỏi dạng Grid chia theo từng Phần -->
+    <div class="max-h-[55vh] overflow-y-auto custom-scrollbar pr-2 space-y-4">
+        
+        <!-- Vòng lặp chia 3 loại câu hỏi: mc (Trắc nghiệm), tf (Đúng/Sai), sa (Tự luận) -->
+        <template v-for="type in ['mc', 'tf', 'sa']" :key="type">
+            
+            <!-- Chỉ hiển thị phần này nếu trong đề có ít nhất 1 câu thuộc loại tương ứng -->
+            <div v-if="newExam.questions.some(q => q.type === type)">
+                
+                <!-- Tiêu đề từng phần -->
+                <p class="text-[10px] font-black text-gray-500 uppercase mb-2 tracking-widest border-l-2 border-blue-600 pl-2">
+                    {{ type === 'mc' ? 'I. Trắc nghiệm' : type === 'tf' ? 'II. Đúng/Sai' : 'III. Tự luận' }}
+                </p>
+                
+                <!-- Lưới hiển thị các nút bấm của phần đó -->
+                <div class="grid grid-cols-5 gap-2">
+                    <button v-for="(q, idx) in newExam.questions" 
+                            v-show="q.type === type"
+                            :key="idx"
+                            @click="scrollToEditQuestion(idx, q.type)"
+                            :class="[
+                                'w-full aspect-square rounded-xl font-black text-xs transition-all border-2 flex items-center justify-center',
+                                activeQuestionTab === q.type 
+                                    ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-200/50 scale-105' 
+                                    : 'bg-white border-gray-100 text-gray-400 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50'
+                            ]"
+                            :title="'Chỉnh sửa câu ' + (idx + 1)">
+                        {{ idx + 1 }}
+                    </button>
+                </div>
+            </div>
+        </template>
+    </div>
+    
+    <div class="mt-4 pt-3 border-t border-gray-100 text-[10px] text-gray-400 font-bold uppercase tracking-widest text-center">
+        Tổng số: <span class="text-blue-600">{{ newExam.questions.length }}</span> câu hỏi
+    </div>
+</div>
     <div class="fixed bottom-6 right-6 z-[100] bg-white/95 backdrop-blur-md px-4 py-3 rounded-2xl shadow-2xl border border-gray-200 flex items-center gap-3 animate-scaleIn">
         
         <div class="px-3 py-1 bg-blue-50 border border-blue-100 rounded-xl flex flex-col items-center shrink-0">
@@ -800,7 +1049,52 @@
             🚀 <span>Lưu & Giao Bài</span>
         </button>
     </div>
-    
+    <!-- MODAL MA TRẬN ĐỀ TỰ ĐỘNG -->
+<div v-if="showMatrixGenerator" class="fixed inset-0 z-[200] flex items-center justify-center p-4 modal-overlay animate-fadeIn">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 border border-gray-100">
+        <h3 class="text-2xl font-black text-gray-800 mb-2">🎲 Tạo đề từ Ma trận</h3>
+        
+        <div class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Chọn môn học</label>
+                <select v-model="matrixSettings.subject" class="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-blue-600">
+                    <option value="">-- Chọn môn --</option>
+                    <option v-for="sub in uniqueSubjects" :key="sub" :value="sub">{{ sub }}</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Chọn khối</label>
+                <select v-model="matrixSettings.grade" class="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none font-bold text-blue-600">
+                    <option value="">-- Chọn khối --</option>
+                    <option value="10">Khối 10</option>
+                    <option value="11">Khối 11</option>
+                    <option value="12">Khối 12</option>
+                </select>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
+                <div class="bg-blue-50 p-3 rounded-xl border border-blue-100">
+                    <label class="block text-[10px] font-black text-blue-600 uppercase text-center mb-2">Trắc nghiệm</label>
+                    <input v-model.number="matrixSettings.mc" type="number" min="0" class="w-full bg-white text-center font-black text-lg py-1 rounded-lg border border-blue-200 outline-none">
+                </div>
+                <div class="bg-green-50 p-3 rounded-xl border border-green-100">
+                    <label class="block text-[10px] font-black text-green-600 uppercase text-center mb-2">Đúng / Sai</label>
+                    <input v-model.number="matrixSettings.tf" type="number" min="0" class="w-full bg-white text-center font-black text-lg py-1 rounded-lg border border-green-200 outline-none">
+                </div>
+                <div class="bg-purple-50 p-3 rounded-xl border border-purple-100">
+                    <label class="block text-[10px] font-black text-purple-600 uppercase text-center mb-2">Tự luận</label>
+                    <input v-model.number="matrixSettings.sa" type="number" min="0" class="w-full bg-white text-center font-black text-lg py-1 rounded-lg border border-purple-200 outline-none">
+                </div>
+            </div>
+        </div>
+
+        <div class="flex gap-3 mt-8">
+            <button @click="showMatrixGenerator = false" class="flex-1 py-3 font-bold text-gray-500 bg-gray-100 rounded-xl hover:bg-gray-200">Hủy bỏ</button>
+            <button @click="generateFromBank" class="flex-1 py-3 font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 shadow-lg">Bốc đề ngay</button>
+        </div>
+    </div>
+</div>
 </div>
 
                 <div v-if="view === 'student-dash'" class="animate-fadeIn">
@@ -1155,6 +1449,50 @@
         </button>
     </div>
 </div>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 animate-fadeIn">
+    
+    <div class="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+        <h3 class="text-lg font-black text-gray-800 mb-4 flex items-center gap-2">
+            <span>📊</span> Phổ điểm lớp học
+        </h3>
+        <div class="h-64 w-full relative">
+            <canvas id="scoreChart"></canvas>
+            <div v-if="filteredResults.length === 0" class="absolute inset-0 flex items-center justify-center bg-white/80 z-10 text-gray-400 font-bold">
+                Chưa có dữ liệu để vẽ biểu đồ
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col h-[340px]">
+        <h3 class="text-lg font-black text-gray-800 mb-4 flex items-center gap-2 shrink-0">
+            <span>🎯</span> Phân tích câu hỏi
+        </h3>
+        <div class="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3">
+            <div v-for="qa in questionAnalytics" :key="qa.index" class="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-black text-gray-600">Câu {{ qa.index }} <span class="text-gray-400 font-normal uppercase">({{ qa.type }})</span></span>
+                    <span :class="qa.correctRate < 40 ? 'text-red-600 bg-red-100' : (qa.correctRate > 80 ? 'text-green-600 bg-green-100' : 'text-blue-600 bg-blue-100')" 
+                          class="text-[10px] font-black px-2 py-0.5 rounded-md">
+                        ĐÚNG {{ qa.correctRate }}%
+                    </span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-1.5">
+                    <div :class="qa.correctRate < 40 ? 'bg-red-500' : (qa.correctRate > 80 ? 'bg-green-500' : 'bg-blue-500')" 
+                         class="h-1.5 rounded-full transition-all" 
+                         :style="{ width: qa.correctRate + '%' }">
+                    </div>
+                </div>
+                <div v-if="qa.correctRate < 40" class="mt-2 text-[10px] text-red-500 font-bold italic">
+                    ⚠️ Câu khó / Học sinh hổng kiến thức
+                </div>
+            </div>
+            
+            <div v-if="questionAnalytics.length === 0" class="text-center py-10 text-gray-400 text-sm font-bold border-2 border-dashed rounded-xl">
+                Chưa có dữ liệu làm bài
+            </div>
+        </div>
+    </div>
+</div>
     <div class="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden">
 <div class="overflow-x-auto">
     <table class="w-full text-left border-collapse">
@@ -1189,9 +1527,12 @@
                         </div>
                     </div>
                 </td>
-                <td class="px-6 py-5 text-sm font-medium text-gray-600">
-                    {{ res.submittedAt }}
-                </td>
+<td class="px-6 py-5">
+    <div class="text-sm font-medium text-gray-600">{{ res.submittedAt }}</div>
+    <div v-if="res.timeTaken" class="text-[10px] text-blue-600 font-bold mt-1 bg-blue-50 inline-block px-2 py-0.5 rounded border border-blue-100 shadow-sm">
+        ⏱ LÀM BÀI: {{ res.timeTaken }}
+    </div>
+</td>
                 <td class="px-6 py-5">
                     <span :class="res.cheats > 0 ? 'text-red-500 bg-red-50' : 'text-green-500 bg-green-50'" class="px-3 py-1 rounded-full text-xs font-black">
                         {{ res.cheats }} lần
@@ -1342,6 +1683,7 @@
         </div>
     </div>
 </div>
+
                 <div v-if="showSettingsModal" class="fixed inset-0 z-[150] flex items-center justify-center p-4 modal-overlay animate-fadeIn">
                     <div class="bg-gray-50 rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border border-gray-200 max-h-[90vh] flex flex-col">
                         <div class="bg-white p-5 border-b border-gray-200 flex justify-between items-center z-10 shadow-sm">
@@ -1485,6 +1827,24 @@
         </div>
     </div>
 </div>
+<div class="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+    <h4 class="font-bold text-gray-800 mb-4 text-lg border-b border-gray-100 pb-2">📦 Chế độ giao & Khóa bài</h4>
+    </div>
+
+<div class="bg-white p-6 rounded-xl border border-emerald-200 shadow-sm bg-emerald-50/20">
+    <div class="flex items-center justify-between">
+        <div>
+            <span class="font-black text-emerald-700 block flex items-center gap-2">
+                <span>🌍</span> Chia sẻ lên Chợ Đề Thi
+            </span>
+            <p class="text-xs text-gray-500 mt-1 max-w-sm">Giáo viên khác trong trường có thể xem và sao chép đề thi này về kho của họ. (Kết quả làm bài của học sinh bạn vẫn được bảo mật tuyệt đối).</p>
+        </div>
+        <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" v-model="newExam.settings.isPublic" class="sr-only peer">
+            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+        </label>
+    </div>
+</div>
                         </div>
                         
                         <div class="bg-white p-5 border-t border-gray-200 flex justify-end gap-3 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
@@ -1498,13 +1858,18 @@
     <div @click="gradingModal = false" class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
     
     <div class="bg-white rounded-3xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden shadow-2xl relative animate-fadeIn">
-        <div class="p-5 border-b flex justify-between items-center bg-gray-50">
-            <div>
-                <h3 class="font-black text-xl text-gray-800">Chấm bài chi tiết</h3>
-                <p class="text-xs text-gray-500 font-medium uppercase tracking-wider">Học sinh: {{ currentGradingResult?.studentName }}</p>
-            </div>
-            <button @click="gradingModal = false" class="bg-gray-200 hover:bg-gray-300 w-10 h-10 rounded-full flex items-center justify-center transition font-bold">✕</button>
+<div class="p-5 border-b flex justify-between items-center bg-gray-50">
+    <div>
+        <h3 class="font-black text-xl text-gray-800">Chấm bài chi tiết</h3>
+        <div class="flex items-center gap-3 mt-1">
+            <p class="text-xs text-gray-500 font-medium uppercase tracking-wider">Học sinh: {{ currentGradingResult?.studentName }}</p>
+            <span v-if="currentGradingResult?.timeTaken" class="text-[10px] text-blue-600 font-black bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md uppercase">
+                ⏱ {{ currentGradingResult.timeTaken }}
+            </span>
         </div>
+    </div>
+    <button @click="gradingModal = false" class="bg-gray-200 hover:bg-gray-300 w-10 h-10 rounded-full flex items-center justify-center transition font-bold">✕</button>
+</div>
 
         <div class="flex-1 overflow-y-auto p-6 bg-gray-100/50">
             <div v-if="currentGradingResult" class="space-y-6">
@@ -1584,25 +1949,32 @@
     </div>
 </div>
 
-                <div v-if="showQrModal" class="fixed inset-0 z-[150] flex items-center justify-center p-4 modal-overlay animate-fadeIn">
-                    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden text-center relative border border-gray-100 p-8">
-                        <button @click="showQrModal = false" class="absolute top-4 right-4 text-gray-400 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 w-8 h-8 rounded-full flex items-center justify-center transition font-bold">✕</button>
-                        
-                        <h3 class="font-black text-gray-800 text-xl mb-1 line-clamp-2 leading-tight">{{ currentQrExamTitle }}</h3>
-                        <p class="text-sm text-gray-500 mb-8 font-medium">Mã tham gia / QR Code</p>
-                        
-                        <div class="bg-white p-4 rounded-2xl inline-block border-2 border-gray-100 mb-8 shadow-sm">
-                            <img :src="`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${currentQrCode}`" alt="QR Code" class="w-56 h-56 mx-auto object-contain">
-                        </div>
-                        
-                        <div>
-                            <span class="text-xs text-gray-400 uppercase font-black tracking-[0.2em] block mb-2">NHẬP MÃ BẰNG TAY</span>
-                            <div class="text-5xl font-black text-blue-600 tracking-[0.15em] bg-blue-50 py-4 rounded-2xl border border-blue-100 shadow-inner">
-                                {{ currentQrCode }}
-                            </div>
-                        </div>
-                    </div>
-                </div>
+<div v-if="showQrModal" class="fixed inset-0 z-[150] flex items-center justify-center p-4 modal-overlay animate-fadeIn">
+    <div class="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden text-center relative border border-gray-100 p-8">
+        <button @click="showQrModal = false" class="absolute top-4 right-4 text-gray-400 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 w-8 h-8 rounded-full flex items-center justify-center transition font-bold">✕</button>
+        
+        <h3 class="font-black text-gray-800 text-xl mb-1 line-clamp-2 leading-tight">{{ currentQrExamTitle }}</h3>
+        <p class="text-sm text-blue-600 mb-6 font-bold bg-blue-50 py-1.5 rounded-lg border border-blue-100 mx-4">
+            Quét mã để vào thẳng bài thi
+        </p>
+        
+        <div class="bg-white p-4 rounded-2xl inline-block border-2 border-gray-100 mb-6 shadow-sm w-full">
+            <img :src="`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${currentQrLink}`" alt="QR Code" class="w-56 h-56 mx-auto object-contain">
+            
+            <button @click="downloadQrCode" class="mt-4 w-full bg-gray-50 text-gray-700 hover:bg-blue-600 hover:text-white font-bold py-3 rounded-xl transition flex items-center justify-center gap-2 border border-gray-200 hover:border-blue-600 shadow-sm">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Lưu ảnh QR này
+            </button>
+        </div>
+        
+        <div>
+            <span class="text-xs text-gray-400 uppercase font-black tracking-[0.2em] block mb-2">HOẶC NHẬP MÃ BẰNG TAY</span>
+            <div class="text-5xl font-black text-blue-600 tracking-[0.15em] bg-blue-50 py-4 rounded-2xl border border-blue-100 shadow-inner">
+                {{ currentQrCode }}
+            </div>
+        </div>
+    </div>
+</div>
                 <div v-if="showDeleteConfirm" class="fixed inset-0 z-[200] flex items-center justify-center p-4 modal-overlay animate-fadeIn">
     <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm overflow-hidden border border-red-50">
         <div class="bg-red-50 py-8 flex justify-center">
