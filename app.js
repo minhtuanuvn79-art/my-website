@@ -254,6 +254,7 @@ const paginatedExams = computed(() => {
 watch([searchExam, selectedSubjectFilter], () => {
     currentExamPage.value = 1;
 });
+const showDetailedAnswers = ref(false); // Biến ẩn/hiện đáp án chi tiết
 const isExamStarting = ref(false); // Biến chặn cảnh báo khi vừa vào
 const showFullscreenOverlay = ref(false);
 const sessionId = ref(Math.random().toString(36).substring(2, 10)); // ID phiên làm việc
@@ -270,7 +271,8 @@ const defaultSettings = {
     isPublished: false,
     scheduledAt: null,
     closedAt: null,
-    isPublic: false
+    isPublic: false,
+    scoreThreshold: 0
 };
 
         // --- 2. SAU ĐÓ MỚI ĐẾN WATCH VÀ HÀM ---
@@ -909,24 +911,45 @@ const openEditModal = (user) => {
 };
 const saveUserEdit = async () => {
     try {
+        // 1. Lấy tên cũ của tài khoản trước khi cập nhật
+        const oldUser = users.value.find(u => u.id === editUserData.value.id);
+        const oldName = oldUser ? oldUser.name : '';
+        const newName = editUserData.value.name;
+
+        // 2. Cập nhật thông tin tài khoản trên bảng 'users'
         const { error } = await supabaseClient
             .from('users')
             .update({ 
-                name: editUserData.value.name, 
+                name: newName, 
                 password: editUserData.value.password, 
                 role: editUserData.value.role 
             })
             .eq('id', editUserData.value.id);
 
         if (!error) {
-            // Tìm và cập nhật lại trong mảng đang hiển thị
+            // 3. ĐỒNG BỘ ĐỔI TÊN: Nếu tên bị thay đổi, tự động đổi tên creator trong đề thi và thư mục
+            if (oldName && oldName !== newName) {
+                // Đổi tên trên Cloud Supabase
+                await supabaseClient.from('exams').update({ creator: newName }).eq('creator', oldName);
+                await supabaseClient.from('folders').update({ creator: newName }).eq('creator', oldName);
+
+                // Đồng bộ cập nhật ngay trên giao diện (Local State)
+                exams.value.forEach(e => {
+                    if (e.creator === oldName) e.creator = newName;
+                });
+                folders.value.forEach(f => {
+                    if (f.creator === oldName) f.creator = newName;
+                });
+            }
+
+            // 4. Tìm và cập nhật lại trong mảng danh sách người dùng đang hiển thị
             const index = users.value.findIndex(u => u.id === editUserData.value.id);
             if (index !== -1) {
                 users.value[index] = { ...editUserData.value };
             }
             
             showEditModal.value = false;
-            showNotify("Cập nhật tài khoản thành công!");
+            showNotify("Cập nhật tài khoản và đồng bộ dữ liệu thành công!");
         } else {
             showNotify("Lỗi lưu dữ liệu: " + error.message, "error");
         }
@@ -1424,38 +1447,39 @@ const handleGenerateAI = async () => {
     showNotify("AI đang phân tích tài liệu...", "success");
 
     try {
-        // 1. NÂNG CẤP PROMPT: Ép AI tách biệt tuyệt đối Câu hỏi và Đáp án
+// 1. NÂNG CẤP PROMPT: Ép AI tách biệt tuyệt đối Câu hỏi, Đáp án và BẮT BUỘC TỰ GIẢI THÍCH
         const strictPrompt = `Bóc tách đề thi sau thành mảng JSON câu hỏi. 
 
         LƯU Ý CỰC KỲ QUAN TRỌNG VỀ PHÂN LOẠI CÂU HỎI (BẮT BUỘC TUÂN THỦ):
-        - Nếu các đáp án được đánh dấu là A, B, C, D (in hoa) -> CHẮC CHẮN ĐÓ LÀ CÂU "mc" (Trắc nghiệm 1 đáp án). TUYỆT ĐỐI KHÔNG được phân loại là "tf" dù tiêu đề phần có ghi chữ "Đúng/Sai" hay bất cứ chữ gì.
+        - Nếu các đáp án được đánh dấu là A, B, C, D (in hoa) -> CHẮC CHẮN ĐÓ LÀ CÂU "mc" (Trắc nghiệm 1 đáp án).
         - Nếu các đáp án được đánh dấu là a), b), c), d) (chữ thường) -> CHẮC CHẮN ĐÓ LÀ CÂU "tf" (Trắc nghiệm đúng sai chùm 4 ý).
         - Nếu không có đáp án lựa chọn -> Đó là câu "sa" (Tự luận / Trả lời ngắn).
 
         CÁC QUY TẮC CẤU TRÚC KHÁC: 
-        1. TÁCH BIỆT NỘI DUNG VÀ ĐÁP ÁN: Phần "text" CHỈ chứa nội dung câu hỏi / phần dẫn. Tuyệt đối KHÔNG gộp các đáp án (A, B, C, D hoặc a, b, c, d) vào trong "text". 
-        2. LÀM SẠCH ĐÁP ÁN: Mảng "options" phải chứa nội dung của từng đáp án. KHÔNG BAO GIỜ bao gồm các tiền tố đánh dấu như "A.", "B.", "C.", "D." hoặc "a)", "b)", "c)", "d)" ở đầu mỗi option.
-        3. XUỐNG DÒNG: Giữ nguyên các dấu xuống dòng bằng ký tự \\n trong phần "text" nếu đó là thơ hoặc đoạn văn (TUYỆT ĐỐI không nối liền các dòng).
+        1. TÁCH BIỆT NỘI DUNG VÀ ĐÁP ÁN: Phần "text" CHỈ chứa nội dung câu hỏi / phần dẫn. Tuyệt đối KHÔNG gộp các đáp án vào trong "text". 
+        2. LÀM SẠCH ĐÁP ÁN: Mảng "options" phải chứa nội dung của từng đáp án. KHÔNG BAO GIỜ bao gồm các tiền tố (VD: A., B., a), b)...).
+        3. XUỐNG DÒNG: Giữ nguyên các dấu xuống dòng bằng ký tự \\n trong phần "text".
         4. HTML: Mã hóa dấu "<" thành "&lt;" và ">" thành "&gt;".
-        5. CÔNG THỨC TOÁN (QUAN TRỌNG): BẮT BUỘC giữ nguyên hoặc chuyển đổi mọi công thức Toán học sang định dạng chuẩn LaTeX. Công thức trong cùng một dòng phải bọc bằng cặp dấu \\( và \\). Công thức đứng riêng 1 dòng bọc bằng $$ và $$.
-        6. HÌNH ẢNH: Nếu trong đoạn văn bản có các ký hiệu như [HINH_ANH_0], [HINH_ANH_1]... BẮT BUỘC BẠN PHẢI GIỮ NGUYÊN nó và đặt vào đúng vị trí trong phần "text" của câu hỏi tương ứng.
+        5. CÔNG THỨC TOÁN (QUAN TRỌNG): BẮT BUỘC chuyển đổi mọi công thức Toán sang định dạng LaTeX (bọc trong \\( \\) hoặc $$ $$).
+        6. HÌNH ẢNH: Giữ nguyên ký hiệu như [HINH_ANH_0] và đặt vào đúng vị trí.
+        7. TỰ ĐỘNG GIẢI THÍCH (BẮT BUỘC): Đối với MỌI câu hỏi, BẠN PHẢI SỬ DỤNG KIẾN THỨC CỦA MÌNH ĐỂ TỰ SUY LUẬN ĐÁP ÁN VÀ VIẾT LỜI GIẢI THÍCH CHI TIẾT vào trường "explanation", ngay cả khi văn bản gốc không hề có lời giải. Lời giải phải phân tích rõ tại sao đáp án đó đúng, hoặc tại sao các đáp án khác sai để học sinh hiểu bài.
 
-        Ví dụ Cấu trúc JSON Chuẩn cho câu MC bình thường:
+        Ví dụ Cấu trúc JSON Chuẩn cho câu MC:
         {
           "type": "mc",
           "text": "Thiết bị nào sau đây thường được tích hợp công nghệ AI nhận diện khuôn mặt?",
           "options": ["Chuột máy tính", "Máy in laser", "Điện thoại thông minh", "Bàn phím cơ"],
           "correct": 2,
-          "explanation": "..."
+          "explanation": "Điện thoại thông minh hiện nay thường được tích hợp AI để nhận diện khuôn mặt (VD: Face ID của Apple), giúp người dùng mở khóa thiết bị an toàn và nhanh chóng mà không cần nhập mật khẩu."
         }
 
         Ví dụ Cấu trúc JSON Chuẩn cho câu TF:
         {
           "type": "tf",
-          "text": "Để quản lý một cửa hàng, học sinh xây dựng CSDL gồm các bảng:\\nKHACHHANG (MaKH, TenKH)\\nHOADON (MaHD, MaKH)\\n\\nCác nhận định sau về thiết kế này:",
+          "text": "Các nhận định sau về thiết kế CSDL:",
           "options": ["Trong bảng HOADON, MaKH là khóa ngoại", "Nên chọn TenKH làm khóa chính", "Thuộc tính MaHD có thể để trống", "Bảng KHACHHANG lưu trữ hóa đơn"],
           "correct": [true, false, false, false],
-          "explanation": "..."
+          "explanation": "a) Đúng vì MaKH dùng để liên kết với bảng KHACHHANG.\\nb) Sai vì Tên khách hàng có thể trùng nhau, không đảm bảo tính duy nhất để làm khóa chính.\\nc) Sai vì Khóa chính (MaHD) bắt buộc không được để trống (Not Null).\\nd) Sai vì thông tin hóa đơn phải được lưu ở bảng HOADON."
         }
         
         Ví dụ Cấu trúc JSON Chuẩn cho câu Toán học:
@@ -1464,7 +1488,7 @@ const handleGenerateAI = async () => {
           "text": "Cho hàm số \\( y = \\frac{2x+1}{x-1} \\). Tập xác định của hàm số là:",
           "options": ["\\( \\mathbb{R} \\setminus \\{1\\} \\)", "\\( \\mathbb{R} \\)", "\\( (1; +\\infty) \\)", "\\( \\mathbb{R} \\setminus \\{-1\\} \\)"],
           "correct": 0,
-          "explanation": "..."
+          "explanation": "Hàm số phân thức có nghĩa khi mẫu số khác 0. Cho \\( x - 1 \\neq 0 \\Leftrightarrow x \\neq 1 \\). Vậy tập xác định của hàm số là \\( D = \\mathbb{R} \\setminus \\{1\\} \\)."
         }
         
         Nội dung cần xử lý: ${aiPrompt.value.trim()}`;
@@ -1738,6 +1762,7 @@ const submitExam = async (isManual = false) => {
     }
     const previousView = view.value;
     view.value = 'result'; 
+    showDetailedAnswers.value = false;
 
     // 3. Dừng bộ đếm thời gian
     if (timerInterval.value) clearInterval(timerInterval.value);
@@ -2572,6 +2597,7 @@ const handleAutoAttachImages = async (event) => {
     }, 500);
 };
 return {
+    showDetailedAnswers,
     publicExams,         // <--- THÊM DÒNG NÀY (Để UI thấy được danh sách Chợ đề thi)
     cloneExam,
     generateFromBank,
