@@ -152,7 +152,7 @@
         </div>
 
         <div v-else>
-<nav class="bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200 px-4 py-3 mb-6 sticky top-0 z-40">
+<nav class="bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200 px-4 md:px-8 xl:px-16 py-3 mb-6 sticky top-0 z-40">
     <div class="max-w-7xl mx-auto flex justify-between items-center">
         <div class="flex items-center space-x-3 cursor-pointer group" @click="goHome">
             <div class="bg-blue-600 p-2 rounded-xl group-hover:rotate-12 transition-transform duration-300">
@@ -198,7 +198,7 @@
     </div>
 </nav>
 
-            <main class="max-w-7xl mx-auto px-4 pb-12">
+            <main class="max-w-7xl mx-auto px-4 md:px-8 xl:px-16 pb-12">
                 
                 <div v-if="view === 'admin-dash'" class="animate-fadeIn">
                     <div class="mb-8">
@@ -850,34 +850,90 @@
         <div class="text-5xl opacity-80 hidden md:block">🤝</div>
     </div>
 
+    <div class="flex flex-col lg:flex-row gap-4 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+        <div class="relative flex-1">
+            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+            <input v-model="searchPublicQuery" type="text" placeholder="Tìm tên đề thi hoặc tên tác giả..." 
+                   class="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:bg-white focus:outline-none font-medium transition-all">
+        </div>
+        
+        <div class="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+            <select v-model="publicSubjectFilter" class="w-full sm:w-48 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:bg-white focus:outline-none font-bold text-gray-600 transition-all cursor-pointer">
+                <option value="">📚 Tất cả môn học</option>
+                <option v-for="sub in uniqueSubjects" :key="sub" :value="sub">{{ sub }}</option>
+            </select>
+            
+            <select v-model="publicGradeFilter" class="w-full sm:w-40 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:bg-white focus:outline-none font-bold text-gray-600 transition-all cursor-pointer">
+                <option value="">🎓 Tất cả khối</option>
+                <option value="10">Khối 10</option>
+                <option value="11">Khối 11</option>
+                <option value="12">Khối 12</option>
+            </select>
+        </div>
+    </div>
+
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div v-for="exam in publicExams" :key="exam.id" class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col hover:-translate-y-1 transition-transform duration-300">
-            <div class="flex justify-between items-start mb-4">
+        <div v-for="exam in paginatedPublicExams" :key="exam.id" 
+             :class="exam.creator === currentUser?.name ? 'border-amber-300 shadow-amber-100/50' : 'border-gray-100 shadow-sm'"
+             class="bg-white p-6 rounded-3xl border flex flex-col hover:-translate-y-1 transition-transform duration-300 relative overflow-hidden">
+            
+            <div v-if="exam.creator === currentUser?.name" class="absolute -right-10 top-4 bg-amber-400 text-amber-900 text-[10px] font-black uppercase tracking-widest px-10 py-1 rotate-45 shadow-sm">
+                Đề của bạn
+            </div>
+
+            <div class="flex justify-between items-start mb-4 pr-6">
                 <span :class="exam.type === 'essay' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'" class="px-3 py-1 text-xs font-bold rounded-lg uppercase tracking-wide">
                     {{ exam.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm' }}
-                </span>
-                <span class="bg-gray-100 text-gray-600 text-[10px] font-black px-2 py-1 rounded-md uppercase">
-                    Tác giả: {{ exam.creator }}
                 </span>
             </div>
             
             <h4 class="text-lg font-bold text-gray-800 mb-2 line-clamp-2">{{ exam.title }}</h4>
             
-            <div class="flex items-center gap-4 text-xs font-bold text-gray-500 mb-6">
+            <div class="space-y-2 mb-6">
+                <p class="text-sm font-bold text-gray-600 flex items-center gap-2">
+                    <span class="w-6 h-6 rounded-full bg-gradient-to-tr from-emerald-100 to-teal-100 flex items-center justify-center text-[10px] font-black text-emerald-700">
+                        {{ exam.creator.charAt(0).toUpperCase() }}
+                    </span>
+                    Tác giả: <span :class="exam.creator === currentUser?.name ? 'text-amber-600' : 'text-emerald-600'">{{ exam.creator }}</span>
+                </p>
+                <div class="flex items-center gap-2 text-xs font-bold text-gray-500">
+                    <span v-if="exam.subject" class="bg-gray-100 px-2 py-1 rounded">Môn: {{ exam.subject }}</span>
+                    <span v-if="exam.grade" class="bg-gray-100 px-2 py-1 rounded">Khối: {{ exam.grade }}</span>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4 text-xs font-bold text-gray-500 mb-6 border-t border-gray-50 pt-4">
                 <span class="flex items-center gap-1">⏱ {{ exam.time }} phút</span>
                 <span class="flex items-center gap-1">📋 {{ exam.questions?.length || 0 }} câu hỏi</span>
             </div>
 
-            <button @click="cloneExam(exam)" class="mt-auto w-full bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white font-bold py-3 rounded-xl transition-colors duration-300 border border-emerald-100 flex items-center justify-center gap-2">
+            <button v-if="exam.creator !== currentUser?.name" @click="cloneExam(exam)" class="mt-auto w-full bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white font-bold py-3 rounded-xl transition-colors duration-300 border border-emerald-100 flex items-center justify-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
                 Sao chép về kho của tôi
             </button>
+            <div v-else class="mt-auto w-full bg-amber-50 text-amber-600 font-bold py-3 rounded-xl border border-amber-100 flex items-center justify-center gap-2 cursor-default">
+                ⭐ Đang chia sẻ lên chợ
+            </div>
         </div>
         
-        <div v-if="publicExams.length === 0" class="col-span-full text-center py-20 bg-white rounded-3xl border-2 border-dashed border-gray-100">
+        <div v-if="filteredPublicExams.length === 0" class="col-span-full text-center py-20 bg-white rounded-3xl border-2 border-dashed border-gray-100">
             <span class="text-5xl block mb-4 opacity-50">🍃</span>
-            <p class="text-gray-400 font-bold">Hiện chưa có giáo viên nào chia sẻ đề thi lên chợ.</p>
+            <p class="text-gray-400 font-bold">Không tìm thấy đề thi nào khớp với bộ lọc.</p>
         </div>
+    </div>
+
+    <div v-if="totalPublicPages > 1" class="mt-6 flex items-center justify-center gap-2 border-t border-gray-200 pt-6 animate-fadeIn">
+        <button @click="currentPublicPage = 1" :disabled="currentPublicPage === 1" 
+                class="px-3 py-1.5 rounded-xl bg-white border border-gray-200 font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-all text-xs shadow-sm">⏮️</button>
+        <button @click="currentPublicPage--" :disabled="currentPublicPage === 1" 
+                class="px-3 py-1.5 rounded-xl bg-white border border-gray-200 font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-all text-xs shadow-sm">⬅️</button>
+        <span class="px-4 py-1.5 bg-emerald-50 border border-emerald-100 rounded-xl text-xs font-black text-emerald-700 shadow-sm">
+            {{ currentPublicPage }} / {{ totalPublicPages }}
+        </span>
+        <button @click="currentPublicPage++" :disabled="currentPublicPage === totalPublicPages" 
+                class="px-3 py-1.5 rounded-xl bg-white border border-gray-200 font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-all text-xs shadow-sm">➡️</button>
+        <button @click="currentPublicPage = totalPublicPages" :disabled="currentPublicPage === totalPublicPages" 
+                class="px-3 py-1.5 rounded-xl bg-white border border-gray-200 font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-all text-xs shadow-sm">⏭️</button>
     </div>
 </div>
 <div v-if="contextMenu.show" 
@@ -1568,12 +1624,19 @@ class="bg-gray-50 p-6 rounded-[2rem] border border-gray-200 relative group trans
 
 <div v-if="view === 'view-results'" class="animate-fadeIn">
     <div class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-            <button @click="view = 'teacher-dash'" class="text-sm font-bold text-blue-600 mb-2 flex items-center hover:underline">
-                <span class="mr-1">←</span> Quay lại bảng điều khiển
+<div class="mb-6">
+            <button @click="view = 'teacher-dash'" 
+                    class="group flex items-center gap-2 text-sm font-bold text-gray-600 bg-white border border-gray-200 px-4 py-2.5 rounded-xl hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-all shadow-sm mb-4 w-max">
+                <svg class="w-4 h-4 text-gray-400 group-hover:text-blue-600 group-hover:-translate-x-1 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                </svg>
+                Quay lại bảng điều khiển
             </button>
-            <h2 class="text-3xl font-black text-gray-800 tracking-tight">Kết quả bài thi</h2>
-            <p class="text-gray-500 font-medium">Theo dõi danh sách nộp bài và chấm điểm chi tiết</p>
+
+            <h2 class="text-2xl md:text-3xl font-black text-gray-800 tracking-tight flex flex-col md:flex-row md:items-center gap-2">
+                Kết quả: <span class="text-blue-600 truncate max-w-2xl" :title="currentExam?.title">{{ currentExam?.title }}</span>
+            </h2>
+            <p class="text-gray-500 font-medium mt-1">Theo dõi danh sách nộp bài và chấm điểm chi tiết</p>
         </div>
         
 <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
@@ -2060,34 +2123,83 @@ class="bg-gray-50 p-6 rounded-[2rem] border border-gray-200 relative group trans
                         </div>
                     </div>
 
-                    <div class="space-y-3">
-                        <div v-if="ans.choice !== null && !Array.isArray(ans.choice)" class="flex items-center gap-3">
-                            <span class="text-sm text-gray-500">Lựa chọn của HS:</span>
-                            <span class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold shadow-sm">
-                                {{ String.fromCharCode(65 + ans.choice) }}
-                            </span>
-                            <span v-if="ans.isCorrect" class="text-green-500 text-xs font-bold">✓ Đúng</span>
-                            <span v-else class="text-red-500 text-xs font-bold">✗ Sai</span>
-                        </div>
+<div class="space-y-3">
+                        <template v-if="exams.find(e => e.id === currentGradingResult.examId)?.questions[idx]">
+                            
+                            <div v-if="exams.find(e => e.id === currentGradingResult.examId).questions[idx].type === 'mc'" class="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                                
+                                <div v-if="ans.choice === null || ans.choice === undefined" class="text-orange-600 font-bold text-sm flex items-center gap-2 bg-orange-50 p-3 rounded-lg border border-orange-200">
+                                    <span>⚠️</span> Học sinh bỏ trống câu này
+                                </div>
+                                
+                                <div v-else class="flex flex-col gap-2">
+                                    <div class="flex items-center gap-3">
+                                        <span class="text-sm text-gray-600 font-medium">HS Chọn:</span>
+                                        <span :class="ans.choice === exams.find(e => e.id === currentGradingResult.examId).questions[idx].correct ? 'bg-green-500 border-green-600 shadow-green-200' : 'bg-red-500 border-red-600 shadow-red-200'" 
+                                              class="w-8 h-8 rounded-full text-white flex items-center justify-center font-black border shadow-md">
+                                            {{ String.fromCharCode(65 + ans.choice) }}
+                                        </span>
+                                        <span v-if="ans.choice === exams.find(e => e.id === currentGradingResult.examId).questions[idx].correct" class="text-green-600 font-black text-sm">✓ ĐÚNG</span>
+                                        <span v-else class="text-red-600 font-black text-sm">✗ SAI</span>
+                                    </div>
+                                </div>
 
-                        <div v-if="Array.isArray(ans.choice)" class="grid grid-cols-2 gap-2">
-                            <div v-for="(c, cIdx) in ans.choice" :key="cIdx" class="text-xs p-2 bg-gray-50 rounded-lg flex justify-between">
-                                <span>Ý {{ cIdx + 1 }}:</span>
-                                <b :class="c ? 'text-blue-600' : 'text-red-600'">{{ c ? 'Đúng' : 'Sai' }}</b>
+                                <div class="mt-3 text-[13px] font-black text-blue-700 bg-blue-50 inline-block px-3 py-1.5 rounded-lg border border-blue-200">
+                                    💡 Đáp án chuẩn: {{ String.fromCharCode(65 + exams.find(e => e.id === currentGradingResult.examId).questions[idx].correct) }}
+                                </div>
                             </div>
-                        </div>
 
-                        <div v-if="ans.text" class="group">
-                            <p class="text-[10px] font-bold text-gray-400 uppercase mb-1">Nội dung trả lời:</p>
-                            <div class="p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded-r-xl text-sm italic text-gray-700 whitespace-pre-wrap shadow-inner">
-                                {{ ans.text }}
+                            <div v-if="exams.find(e => e.id === currentGradingResult.examId).questions[idx].type === 'tf'" class="space-y-2">
+                                <div v-for="(opt, oIdx) in exams.find(e => e.id === currentGradingResult.examId).questions[idx].options" :key="oIdx" 
+                                     class="p-3 bg-gray-50 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3"
+                                     :class="(ans.choice && ans.choice[oIdx] !== null) ? (ans.choice[oIdx] === exams.find(e => e.id === currentGradingResult.examId).questions[idx].correct[oIdx] ? 'border-green-300 bg-green-50/50' : 'border-red-300 bg-red-50/50') : 'border-orange-300 bg-orange-50/50'">
+                                    
+                                    <div class="font-bold text-gray-700 text-sm flex-1">{{ String.fromCharCode(97 + oIdx) }}) {{ opt }}</div>
+                                    
+                                    <div class="flex items-center gap-4 text-xs font-black shrink-0">
+                                        <div class="flex flex-col items-center min-w-[60px]">
+                                            <span class="text-gray-400 text-[9px] uppercase mb-1">HS Chọn</span>
+                                            <span v-if="!ans.choice || ans.choice[oIdx] === null" class="text-orange-600 bg-white px-3 py-1 rounded-md border border-orange-200 shadow-sm">TRỐNG</span>
+                                            <span v-else :class="ans.choice[oIdx] ? 'text-blue-600 border-blue-200' : 'text-red-600 border-red-200'" class="bg-white px-3 py-1 rounded-md border shadow-sm">
+                                                {{ ans.choice[oIdx] ? 'ĐÚNG' : 'SAI' }}
+                                            </span>
+                                        </div>
+                                        
+                                        <div class="w-px h-8 bg-gray-300"></div>
+                                        
+                                        <div class="flex flex-col items-center min-w-[60px]">
+                                            <span class="text-gray-400 text-[9px] uppercase mb-1">Đáp án</span>
+                                            <span :class="exams.find(e => e.id === currentGradingResult.examId).questions[idx].correct[oIdx] ? 'text-blue-600' : 'text-red-600'" class="bg-gray-100 px-3 py-1 rounded-md border border-gray-200">
+                                                {{ exams.find(e => e.id === currentGradingResult.examId).questions[idx].correct[oIdx] ? 'ĐÚNG' : 'SAI' }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
 
-                        <div v-if="ans.fileData" class="mt-4">
-                            <p class="text-[10px] font-bold text-gray-400 uppercase mb-2">Ảnh minh chứng:</p>
-                            <img :src="ans.fileData" class="max-w-full rounded-xl border-2 border-white shadow-lg cursor-zoom-in" @click="window.open(ans.fileData)">
-                        </div>
+                            <div v-if="exams.find(e => e.id === currentGradingResult.examId).questions[idx].type === 'sa' || exams.find(e => e.id === currentGradingResult.examId).questions[idx].type === 'essay'" class="group">
+                                
+                                <div v-if="(!ans.text || ans.text.trim() === '') && !ans.fileData" class="p-4 bg-orange-50 border border-orange-200 rounded-xl text-orange-600 font-bold text-sm flex items-center gap-2">
+                                    <span>⚠️</span> Học sinh bỏ trống câu tự luận này
+                                </div>
+                                
+                                <template v-else>
+                                    <div v-if="ans.text" class="p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded-r-xl text-sm italic text-gray-800 whitespace-pre-wrap shadow-inner font-medium">
+                                        {{ ans.text }}
+                                    </div>
+                                    <div v-if="ans.fileData" class="mt-4">
+                                        <p class="text-[10px] font-black text-gray-400 uppercase mb-2">Ảnh minh chứng:</p>
+                                        <img :src="ans.fileData" class="max-w-[300px] rounded-xl border-4 border-white shadow-lg cursor-zoom-in hover:scale-[1.02] transition" @click="window.open(ans.fileData)">
+                                    </div>
+                                </template>
+                                
+                                <div v-if="exams.find(e => e.id === currentGradingResult.examId).questions[idx].explanation" class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                                    <span class="text-[10px] font-black text-blue-700 uppercase tracking-widest block mb-1">💡 Đáp án / Hướng dẫn chấm:</span>
+                                    <div class="prose-content text-sm text-gray-700 font-medium" v-html="exams.find(e => e.id === currentGradingResult.examId).questions[idx].explanation"></div>
+                                </div>
+                            </div>
+
+                        </template>
                     </div>
                 </div>
             </div>

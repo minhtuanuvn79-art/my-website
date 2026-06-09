@@ -153,12 +153,54 @@ const generateFromBank = () => {
     showNotify(`Đã bốc thành công ${selectedMC.length + selectedTF.length + selectedSA.length} câu vào đề thi!`, "success");
 };
 // --- THƯ VIỆN ĐỀ THI CHUNG (CHỢ ĐỀ THI) ---
-const publicExams = computed(() => {
-    // Lọc các đề được Public VÀ KHÔNG PHẢI do chính mình tạo ra
-    return exams.value.filter(e => 
-        e.settings?.isPublic === true && 
-        e.creator !== currentUser.value?.name
-    );
+// --- THƯ VIỆN ĐỀ THI CHUNG (CHỢ ĐỀ THI) ---
+const searchPublicQuery = ref('');
+const publicSubjectFilter = ref('');
+const publicGradeFilter = ref('');
+const currentPublicPage = ref(1);
+const publicExamsPerPage = 6;
+
+const filteredPublicExams = computed(() => {
+    // 1. Lọc lấy TẤT CẢ các đề được bật Public (Bao gồm cả đề của mình)
+    let result = exams.value.filter(e => e.settings?.isPublic === true);
+
+    // 2. Lọc theo từ khóa (Tìm tên đề thi HOẶC tên tác giả)
+    if (searchPublicQuery.value.trim()) {
+        const term = searchPublicQuery.value.toLowerCase().trim();
+        result = result.filter(exam => 
+            exam.title.toLowerCase().includes(term) || 
+            (exam.creator && exam.creator.toLowerCase().includes(term))
+        );
+    }
+
+    // 3. Lọc theo Môn học
+    if (publicSubjectFilter.value) {
+        result = result.filter(exam => exam.subject === publicSubjectFilter.value);
+    }
+
+    // 4. Lọc theo Khối lớp
+    if (publicGradeFilter.value) {
+        result = result.filter(exam => exam.grade === publicGradeFilter.value);
+    }
+
+    // 5. Sắp xếp: Ưu tiên đẩy các đề do chính mình tạo lên đầu danh sách để dễ quản lý
+    return result.sort((a, b) => {
+        const isMyA = a.creator === currentUser.value?.name ? -1 : 1;
+        const isMyB = b.creator === currentUser.value?.name ? -1 : 1;
+        return isMyA - isMyB;
+    });
+});
+
+// Phân trang cho Chợ đề thi
+const totalPublicPages = computed(() => Math.ceil(filteredPublicExams.value.length / publicExamsPerPage) || 1);
+const paginatedPublicExams = computed(() => {
+    const start = (currentPublicPage.value - 1) * publicExamsPerPage;
+    return filteredPublicExams.value.slice(start, start + publicExamsPerPage);
+});
+
+// Tự động quay về trang 1 nếu thay đổi bộ lọc
+watch([searchPublicQuery, publicSubjectFilter, publicGradeFilter], () => {
+    currentPublicPage.value = 1;
 });
 
 const cloneExam = async (examTemplate) => {
@@ -168,7 +210,6 @@ const cloneExam = async (examTemplate) => {
     const clonedExam = JSON.parse(JSON.stringify(examTemplate));
     
     // 2. Làm mới các thông số nhận diện
-    clonedExam.id = Date.now(); // Cấp ID mới
     clonedExam.creator = currentUser.value.name; // Đổi chủ sở hữu thành người đang copy
     clonedExam.examCode = Math.random().toString(36).substring(2, 8).toUpperCase(); // Mã phòng thi mới
     
@@ -179,10 +220,12 @@ const cloneExam = async (examTemplate) => {
     clonedExam.settings.folderId = null; // Trả về màn hình chính, không cất trong thư mục
 
     // 4. Lưu lên Database
-    const { error } = await supabaseClient.from('exams').insert([clonedExam]);
+    // XÓA clonedExam.id trước khi đẩy lên để DB tự sinh ID tự tăng
+    delete clonedExam.id;
+    const { data, error } = await supabaseClient.from('exams').insert([clonedExam]).select();
     
-    if (!error) {
-        exams.value.unshift(clonedExam);
+    if (!error && data) {
+        exams.value.unshift(data[0]); // Lấy data có ID chuẩn từ DB
         showNotify("Đã sao chép đề thi thành công vào kho của bạn!");
         teacherTab.value = 'exams'; // Tự động chuyển về kho cá nhân để xem đề vừa copy
     } else {
@@ -1233,17 +1276,18 @@ const filteredResults = computed(() => {
     const grouped = {};
     
     resultsForExam.forEach(r => {
-        const studentId = r.studentName;
+        // CHUẨN HÓA: Đưa về chữ thường và gom các khoảng trắng thừa thành 1 dấu cách
+        const normalizedKey = r.studentName.trim().toLowerCase().replace(/\s+/g, ' ');
         
-        if (!grouped[studentId]) {
-            grouped[studentId] = { ...r, totalAttempts: 1 };
+        if (!grouped[normalizedKey]) {
+            grouped[normalizedKey] = { ...r, totalAttempts: 1 };
         } else {
-            grouped[studentId].totalAttempts++;
+            grouped[normalizedKey].totalAttempts++;
             // CHỈ GIỮ LẠI BẢN GHI CÓ ĐIỂM CAO NHẤT ĐỂ HIỂN THỊ
-            if (r.score > grouped[studentId].score) {
-                const oldAttempts = grouped[studentId].totalAttempts;
-                Object.assign(grouped[studentId], r);
-                grouped[studentId].totalAttempts = oldAttempts;
+            if (r.score > grouped[normalizedKey].score) {
+                const oldAttempts = grouped[normalizedKey].totalAttempts;
+                Object.assign(grouped[normalizedKey], r);
+                grouped[normalizedKey].totalAttempts = oldAttempts;
             }
         }
     });
@@ -1251,15 +1295,14 @@ const filteredResults = computed(() => {
     // 3. Chuyển Object thành Mảng và sắp xếp
     let finalArray = Object.values(grouped).sort((a, b) => b.id - a.id);
 
-    // 4. BỔ SUNG LỌC TÌM KIẾM THEO TÊN (Nếu người dùng có gõ tìm kiếm)
+    // 4. LỌC TÌM KIẾM THEO TÊN (Cũng cần chuẩn hóa từ khóa)
     if (searchResultQuery.value.trim()) {
-        const term = searchResultQuery.value.toLowerCase().trim();
+        const term = searchResultQuery.value.toLowerCase().trim().replace(/\s+/g, ' ');
         finalArray = finalArray.filter(r => 
-            r.studentName.toLowerCase().includes(term)
+            r.studentName.toLowerCase().replace(/\s+/g, ' ').includes(term)
         );
     }
     
-    // Trả về mảng danh sách bài làm đã qua xử lý
     return finalArray;
 });
 // --- THỐNG KÊ PHÂN TÍCH (ANALYTICS) ---
@@ -2179,11 +2222,11 @@ const confirmStartExam = async () => {
     if (attemptLimit > 0) {
         // Chuẩn hóa chuỗi định danh học sinh (Họ tên - Lớp) để kiểm tra
         const displayIdentity = `${studentProfile.value.fullName.trim()} - Lớp: ${studentProfile.value.className.trim()}`;
-        
-        // Đếm số lượt đã nộp trong danh sách kết quả (allResults)
+// Đếm số lượt đã nộp trong danh sách kết quả (Đã chặn lách luật bằng khoảng trắng)
+        const normalizedInput = displayIdentity.toLowerCase().replace(/\s+/g, ' ');
         const previousAttempts = allResults.value.filter(r => 
             r.examId === exam.id && 
-            r.studentName.toLowerCase() === displayIdentity.toLowerCase()
+            r.studentName.toLowerCase().replace(/\s+/g, ' ') === normalizedInput
         ).length;
         
         if (previousAttempts >= attemptLimit) {
@@ -2416,9 +2459,13 @@ const historyStudentName = ref('');
 
 const openStudentHistory = (studentName, examId) => {
     historyStudentName.value = studentName;
-    // Lọc lấy toàn bộ các lần nộp bài của học sinh này trong đề thi hiện tại
+    
+    // Chuẩn hóa tên để đối chiếu
+    const normalizedTargetName = studentName.trim().toLowerCase().replace(/\s+/g, ' ');
+
+    // Lọc lấy toàn bộ các lần nộp bài có cùng cái tên đã chuẩn hóa
     studentHistory.value = allResults.value
-        .filter(r => r.examId === examId && r.studentName === studentName)
+        .filter(r => r.examId === examId && r.studentName.trim().toLowerCase().replace(/\s+/g, ' ') === normalizedTargetName)
         .sort((a, b) => b.id - a.id); // Sắp xếp mới nhất lên đầu
     
     showHistoryModal.value = true;
@@ -2674,12 +2721,18 @@ const handleAutoAttachImages = async (event) => {
     }, 500);
 };
 return {
+    searchPublicQuery,
+publicSubjectFilter,
+publicGradeFilter,
+currentPublicPage,
+totalPublicPages,
+filteredPublicExams,
+paginatedPublicExams,
     searchArchiveQuery,
 currentArchivePage,
 totalArchivePages,
 paginatedArchivedExams,
     showDetailedAnswers,
-    publicExams,         // <--- THÊM DÒNG NÀY (Để UI thấy được danh sách Chợ đề thi)
     cloneExam,
     generateFromBank,
     showMatrixGenerator,
