@@ -687,20 +687,21 @@
                         </div>
                     </div>
 <div v-if="teacherTab === 'archive'" class="animate-fadeIn space-y-6">
-    <div class="flex gap-4">
-        <div class="w-1/3 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-max">
+    <div class="flex flex-col md:flex-row gap-6">
+        
+        <div class="w-full md:w-1/3 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-max">
             <div class="flex justify-between items-center mb-6">
                 <h3 class="font-black text-gray-800">Thư Mục</h3>
-                <button @click="showFolderModal = true" class="bg-gray-100 hover:bg-gray-200 text-gray-700 w-8 h-8 rounded-lg font-bold transition">+</button>
+                <button @click="showFolderModal = true" class="bg-gray-100 hover:bg-gray-200 text-gray-700 w-8 h-8 rounded-lg font-bold transition shadow-sm">+</button>
             </div>
             
             <div class="space-y-2">
-<div v-for="folder in filteredFolders" :key="folder.id" 
-     @click="activeFolderId = folder.id"
+                <div v-for="folder in filteredFolders" :key="folder.id" 
+                     @click="activeFolderId = folder.id"
                      :class="activeFolderId === folder.id ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-gray-50 border-gray-100 text-gray-600 hover:border-gray-300'"
                      class="p-3 rounded-xl border flex justify-between items-center cursor-pointer transition">
                     <span class="font-bold flex items-center gap-2">📁 {{ folder.name }}</span>
-                    <button @click.stop="deleteFolder(folder.id)" class="text-red-400 hover:text-red-600">✕</button>
+                    <button @click.stop="deleteFolder(folder.id)" class="text-red-400 hover:text-red-600 transition p-1">✕</button>
                 </div>
                 
                 <div v-if="folders.length === 0" class="text-center py-8 text-gray-400 text-sm font-medium border-2 border-dashed rounded-xl">
@@ -709,23 +710,130 @@
             </div>
         </div>
 
-        <div class="w-2/3">
-            <div v-if="!activeFolderId" class="bg-white p-10 rounded-2xl shadow-sm border border-gray-100 text-center text-gray-400 font-bold">
-                <span class="text-4xl block mb-2">📂</span>
-                Hãy chọn một thư mục để xem đề thi
+        <div class="w-full md:w-2/3">
+            <div v-if="!activeFolderId" class="bg-white p-10 rounded-2xl shadow-sm border border-gray-100 text-center text-gray-400 font-bold h-full flex flex-col items-center justify-center min-h-[400px]">
+                <span class="text-5xl block mb-4 opacity-50">📂</span>
+                Hãy chọn một thư mục bên trái để xem và quản lý đề thi
             </div>
             
-            <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div v-for="exam in archivedExams" :key="exam.id" class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col opacity-80 hover:opacity-100 transition">
-                    <h4 class="font-bold text-gray-800 mb-2">{{ exam.title }}</h4>
-                    <p class="text-xs text-gray-500 mb-4">Mã phòng: {{ exam.examCode || '---' }}</p>
-                    <button @click="moveExamToFolder(exam, null)" class="mt-auto bg-orange-100 hover:bg-orange-500 hover:text-white text-orange-700 font-bold py-2.5 rounded-lg text-sm transition">
-                        Khôi phục ra ngoài ➔
-                    </button>
+            <div v-else class="space-y-6">
+                <div class="relative w-full">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+                    <input v-model="searchArchiveQuery" type="text" placeholder="Tìm kiếm đề thi trong thư mục này..." 
+                           class="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-medium shadow-sm transition-all">
                 </div>
-                
-                <div v-if="archivedExams.length === 0" class="col-span-full bg-white p-10 rounded-2xl shadow-sm border border-gray-100 text-center text-gray-400 text-sm font-bold border-dashed">
-                    Thư mục này đang trống
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div v-for="exam in paginatedArchivedExams" :key="exam.id" 
+                         class="p-6 rounded-2xl shadow-sm border border-gray-100 exam-card flex flex-col transition-all relative bg-white hover:-translate-y-1 hover:shadow-md">
+                        
+                        <div class="flex justify-between items-start mb-3">
+                            <span :class="exam.type === 'essay' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'" class="px-3 py-1 text-xs font-bold rounded-lg uppercase tracking-wide">
+                                {{ exam.type === 'essay' ? 'Tự luận' : 'Trắc nghiệm' }}
+                            </span>
+                            
+                            <button @click="moveExamToFolder(exam, null)" class="text-[10px] bg-orange-100 text-orange-600 hover:bg-orange-500 hover:text-white font-black uppercase tracking-wider px-2.5 py-1.5 rounded-lg transition-all shadow-sm flex items-center gap-1">
+                                📤 Khôi phục
+                            </button>
+                        </div>
+                        
+                        <h3 class="text-lg font-bold text-gray-800 mb-2 line-clamp-2">{{ exam.title }}</h3>
+                        
+                        <div v-if="exam.examCode" class="mt-2 mb-3 bg-gray-50 p-3 rounded-xl border border-gray-200 border-dashed flex justify-between items-center transition hover:border-blue-300">
+                            <div>
+                                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">Mã phòng thi</span>
+                                <span class="font-black text-blue-600 tracking-widest text-lg">{{ exam.examCode }}</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button @click="copyExamLink(exam.examCode)" class="w-9 h-9 bg-white rounded-lg shadow-sm border border-gray-200 flex items-center justify-center hover:scale-105 hover:text-blue-600 transition" title="Copy link gửi học sinh">🔗</button>
+                                <button @click="openQrModal(exam)" class="w-9 h-9 bg-white rounded-lg shadow-sm border border-gray-200 flex items-center justify-center hover:scale-105 hover:text-blue-600 transition" title="Mở mã QR">📱</button>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-4 text-xs font-bold text-gray-500 mb-5">
+                            <span class="flex items-center gap-1">⏱ {{ exam.time }} phút</span>
+                            <span v-if="exam.questions" class="flex items-center gap-1">📋 {{ exam.questions.length }} câu</span>
+                        </div>
+                        
+                        <div class="mt-auto pt-4 border-t border-gray-100 grid grid-cols-2 gap-2 mb-4">
+                            <button @click="exportToWord(exam)" class="bg-gray-50 text-gray-700 text-xs font-bold py-2 rounded-lg border border-gray-200 hover:bg-gray-100 flex items-center justify-center gap-1">
+                                📄 Xuất Word
+                            </button>
+                            <button @click="startPresentation(exam)" class="bg-gray-50 text-gray-700 text-xs font-bold py-2 rounded-lg border border-gray-200 hover:bg-gray-100 flex items-center justify-center gap-1">
+                                🖥️ Trình chiếu
+                            </button>
+                        </div>
+
+                        <div class="flex flex-col gap-3">
+                            <div class="flex items-center gap-2">
+                                <button v-if="!exam.settings?.isPublished && (!exam.settings?.scheduledAt || new Date() < new Date(exam.settings.scheduledAt))" 
+                                        @click="quickPublish(exam)" 
+                                        class="bg-green-50 text-green-600 px-3 py-1 rounded-lg text-[10px] font-black hover:bg-green-100 transition border border-green-200 w-max">
+                                    🚀 Giao ngay
+                                </button>
+                                <template v-else>
+                                    <span v-if="exam.settings?.closedAt && new Date() >= new Date(exam.settings.closedAt)" 
+                                          class="text-red-500 text-[10px] font-black uppercase flex items-center gap-1 bg-red-50 px-2 py-1 rounded-lg border border-red-100">
+                                        🔒 Đã khóa
+                                    </span>
+                                    <template v-else>
+                                        <span class="text-green-500 text-[10px] font-black uppercase flex items-center gap-1 bg-green-50 px-2 py-1 rounded-lg border border-green-100">
+                                            <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span> Đang giao
+                                        </span>
+                                        <button @click="unpublishExam(exam)" 
+                                                class="text-red-500 text-[10px] font-bold hover:underline bg-red-50 px-2 py-1 rounded-lg border border-red-100 transition">
+                                            ↩️ Thu hồi
+                                        </button>
+                                    </template>
+                                </template>
+                            </div>
+
+                            <div class="flex justify-between items-center border-t border-gray-100 pt-3 mt-1">
+                                <div class="flex items-center gap-2 xl:gap-3">
+                                    <button @click="viewResults(exam.id)" class="text-blue-600 text-[11px] xl:text-xs font-bold hover:underline">📊 Chấm bài</button>
+                                    <button @click="openEditExam(exam)" class="text-orange-600 text-[11px] xl:text-xs font-bold hover:underline">✏️ Sửa đề</button>
+                                    <button @click="openLiveMonitor(exam)" class="text-green-600 text-[11px] xl:text-xs font-bold hover:underline flex items-center gap-1">
+                                        <span class="relative flex h-2 w-2 mr-0.5">
+                                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                            <span class="relative inline-flex rounded-full h-2 w-2 bg-green-600"></span>
+                                        </span>
+                                        Radar
+                                    </button>
+                                </div>
+                                
+                                <button @click="deleteExam(exam.id)" class="text-red-400 hover:text-red-600 p-1 transition-colors" title="Xóa đề thi">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div v-if="archivedExams.length === 0" class="col-span-full bg-white p-10 rounded-2xl shadow-sm border border-gray-100 text-center text-gray-400 text-sm font-bold border-dashed flex flex-col items-center justify-center min-h-[300px]">
+                        <span class="text-4xl mb-3 opacity-50">🍃</span>
+                        Thư mục này đang trống hoặc không tìm thấy đề thi khớp với từ khóa.
+                    </div>
+                </div>
+
+                <div v-if="totalArchivePages > 1" class="mt-6 flex items-center justify-center gap-2 border-t border-gray-200 pt-6 animate-fadeIn">
+                    <button @click="currentArchivePage = 1" :disabled="currentArchivePage === 1" 
+                            class="px-3 py-1.5 rounded-xl bg-white border border-gray-200 font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-all text-xs shadow-sm">
+                        ⏮️
+                    </button>
+                    <button @click="currentArchivePage--" :disabled="currentArchivePage === 1" 
+                            class="px-3 py-1.5 rounded-xl bg-white border border-gray-200 font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-all text-xs shadow-sm">
+                        ⬅️
+                    </button>
+                    <span class="px-4 py-1.5 bg-blue-50 border border-blue-100 rounded-xl text-xs font-black text-blue-700 shadow-sm">
+                        {{ currentArchivePage }} / {{ totalArchivePages }}
+                    </span>
+                    <button @click="currentArchivePage++" :disabled="currentArchivePage === totalArchivePages" 
+                            class="px-3 py-1.5 rounded-xl bg-white border border-gray-200 font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-all text-xs shadow-sm">
+                        ➡️
+                    </button>
+                    <button @click="currentArchivePage = totalArchivePages" :disabled="currentArchivePage === totalArchivePages" 
+                            class="px-3 py-1.5 rounded-xl bg-white border border-gray-200 font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-all text-xs shadow-sm">
+                        ⏭️
+                    </button>
                 </div>
             </div>
         </div>
@@ -799,13 +907,14 @@
         <h3 class="text-xl font-black text-gray-800 mb-4">Lưu trữ đề thi</h3>
         <p class="text-xs text-gray-500 mb-4 font-medium">Chọn thư mục để cất đề thi này vào:</p>
         
-        <div class="flex-1 overflow-y-auto space-y-2 mb-6 pr-1 custom-scrollbar">
-            <button v-for="folder in folders" :key="folder.id" 
+<div class="flex-1 overflow-y-auto space-y-2 mb-6 pr-1 custom-scrollbar">
+            <button v-for="folder in filteredFolders" :key="folder.id" 
                     @click="moveExamToFolder(contextMenu.exam, folder.id)"
                     class="w-full text-left p-3 rounded-xl bg-gray-50 hover:bg-orange-50 border border-gray-200 hover:border-orange-300 font-bold text-gray-700 transition flex items-center gap-2">
                 📁 {{ folder.name }}
             </button>
-            <div v-if="folders.length === 0" class="text-center py-4 text-xs text-gray-400 font-bold">
+            
+            <div v-if="filteredFolders.length === 0" class="text-center py-4 text-xs text-gray-400 font-bold">
                 Bạn chưa có thư mục nào. Hãy sang Tab Kho Lưu Trữ để tạo nhé!
             </div>
         </div>

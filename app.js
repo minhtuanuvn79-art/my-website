@@ -325,23 +325,22 @@ onMounted(() => { document.addEventListener('click', closeContextMenu); });
 const createFolder = async () => {
     if (!newFolderName.value.trim()) return showNotify("Vui lòng nhập tên thư mục!", "error");
     
-    const newFolder = { 
-        id: Date.now().toString(), 
-        name: newFolderName.value.trim(),
-        creator: currentUser.value?.name // <-- THÊM DÒNG NÀY ĐỂ LƯU NGƯỜI TẠO THƯ MỤC
-    };
+const newFolder = { 
+    name: newFolderName.value.trim(),
+    creator: currentUser.value?.name
+};
 
-    // Đẩy lên Supabase
-    const { error } = await supabaseClient.from('folders').insert([newFolder]);
-    
-    if (!error) {
-        folders.value.push(newFolder);
-        newFolderName.value = '';
-        showFolderModal.value = false;
-        showNotify("Đã tạo thư mục mới trên CSDL!");
-    } else {
-        showNotify("Lỗi CSDL: " + error.message, "error");
-    }
+// Thêm .select() để lấy Folder kèm ID tự tăng
+const { data, error } = await supabaseClient.from('folders').insert([newFolder]).select();
+
+if (!error && data) {
+    folders.value.push(data[0]); // Cập nhật bản ghi có ID chuẩn vào UI
+    newFolderName.value = '';
+    showFolderModal.value = false;
+    showNotify("Đã tạo thư mục mới trên CSDL!");
+} else {
+    showNotify("Lỗi CSDL: " + error.message, "error");
+}
 };
 // TỰ ĐỘNG LỌC: Chỉ hiển thị các thư mục do chính tài khoản này tạo ra
 const filteredFolders = computed(() => {
@@ -388,13 +387,45 @@ const moveExamToFolder = async (exam, folderId) => {
     }
 };
 
-// Lọc các đề thi nằm TRONG thư mục đang mở VÀ do chính mình tạo
+// --- STATE TÌM KIẾM & PHÂN TRANG KHO LƯU TRỮ ---
+const searchArchiveQuery = ref('');
+const currentArchivePage = ref(1);
+const archiveExamsPerPage = 4; // Số lượng đề hiển thị trên mỗi trang trong kho
+
+// Lọc và Tìm kiếm đề thi nằm TRONG thư mục đang mở
 const archivedExams = computed(() => {
     if (!activeFolderId.value) return [];
-    return exams.value.filter(e => 
+    
+    // 1. Lọc theo thư mục
+    let result = exams.value.filter(e => 
         e.settings?.folderId === activeFolderId.value && 
         e.creator === currentUser.value?.name
     );
+
+    // 2. Lọc theo từ khóa tìm kiếm (Nếu có)
+    if (searchArchiveQuery.value.trim()) {
+        const term = searchArchiveQuery.value.toLowerCase().trim();
+        result = result.filter(exam => exam.title.toLowerCase().includes(term));
+    }
+
+    return result;
+});
+
+// Tính tổng số trang trong kho
+const totalArchivePages = computed(() => {
+    return Math.ceil(archivedExams.value.length / archiveExamsPerPage) || 1;
+});
+
+// Cắt mảng dữ liệu để hiển thị theo trang
+const paginatedArchivedExams = computed(() => {
+    const start = (currentArchivePage.value - 1) * archiveExamsPerPage;
+    const end = start + archiveExamsPerPage;
+    return archivedExams.value.slice(start, end);
+});
+
+// Tự động reset về trang 1 khi đổi thư mục hoặc gõ tìm kiếm
+watch([activeFolderId, searchArchiveQuery], () => {
+    currentArchivePage.value = 1;
 });
         // ==========================================
         // HÀM HỆ THỐNG VÀ XỬ LÝ CHUNG
@@ -750,13 +781,30 @@ setTimeout(async () => {
         const getRoleName = (role) => role === 'admin' ? 'Quản trị viên' : role === 'teacher' ? 'Giáo viên' : 'Học sinh';
         const getRoleBadgeClass = (role) => role === 'admin' ? 'bg-purple-100 text-purple-700' : role === 'teacher' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700';
 
-        const handleRegister = async () => {
-            if (!authForm.value.name.trim() || !authForm.value.password.trim()) return showNotify("Vui lòng điền đầy đủ thông tin", "error");
-            if (users.value.find(u => u.name.toLowerCase() === authForm.value.name.toLowerCase())) return showNotify("Tên người dùng đã tồn tại", "error");
-            const newUser = { id: Date.now(), name: authForm.value.name, password: authForm.value.password, role: 'student' };
-            const { error } = await supabaseClient.from('users').insert([newUser]);
-            if (!error) { users.value.push(newUser); showNotify("Đăng ký thành công!"); switchView('login'); } else showNotify("Lỗi CSDL: " + error.message, "error");
-        };
+const handleRegister = async () => {
+    if (!authForm.value.name.trim() || !authForm.value.password.trim()) return showNotify("Vui lòng điền đầy đủ thông tin", "error");
+    
+    // Kiểm tra nhanh trên Frontend
+    if (users.value.find(u => u.name.toLowerCase() === authForm.value.name.toLowerCase())) 
+        return showNotify("Tên người dùng đã tồn tại", "error");
+
+    const newUser = { name: authForm.value.name, password: authForm.value.password, role: 'student' };
+
+    const { data, error } = await supabaseClient.from('users').insert([newUser]).select();
+
+    if (!error && data) { 
+        users.value.push(data[0]); 
+        showNotify("Đăng ký thành công!"); 
+        switchView('login'); 
+    } else {
+        // Bắt lỗi trùng lặp từ Database và hiển thị UI thân thiện
+        if (error.code === '23505' || error.message.includes('unique constraint')) {
+            showNotify("Tên tài khoản này đã có người sử dụng, vui lòng chọn tên khác!", "error");
+        } else {
+            showNotify("Lỗi CSDL: " + error.message, "error");
+        }
+    }
+};
 
 const handleLogin = async () => {
     if (!authForm.value.name.trim() || !authForm.value.password.trim()) {
@@ -1029,24 +1077,42 @@ const openCreateNewExam = () => {
     
     showNotify("Đã khởi tạo phôi đề thi mới!");
 };
-        const saveExam = async () => {
-            if (!newExam.value.title) return showNotify("Vui lòng nhập tên đề thi/bài tập", "error");
-            if (newExam.value.type === 'quiz' && newExam.value.questions.length === 0) return showNotify("Đề thi cần ít nhất 1 câu hỏi", "error");
-            
-            const isEditing = !!newExam.value.id;
-            if(!newExam.value.settings) newExam.value.settings = {...defaultSettings};
-            const examData = { ...newExam.value, creator: currentUser.value.name, examCode: newExam.value.examCode || Math.random().toString(36).substring(2, 8).toUpperCase() };
+const saveExam = async () => {
+    if (!newExam.value.title) return showNotify("Vui lòng nhập tên đề thi/bài tập", "error");
+    if (newExam.value.type === 'quiz' && newExam.value.questions.length === 0) return showNotify("Đề thi cần ít nhất 1 câu hỏi", "error");
+    
+    const isEditing = !!newExam.value.id;
+    if(!newExam.value.settings) newExam.value.settings = {...defaultSettings};
+    const examData = { ...newExam.value, creator: currentUser.value.name, examCode: newExam.value.examCode || Math.random().toString(36).substring(2, 8).toUpperCase() };
 
-            let error;
-            if (isEditing) error = (await supabaseClient.from('exams').update(examData).eq('id', newExam.value.id)).error;
-            else { examData.id = Date.now(); error = (await supabaseClient.from('exams').insert([examData])).error; }
-            
-            if (!error) {
-                if (isEditing) { const idx = exams.value.findIndex(e => e.id === examData.id); if (idx !== -1) exams.value[idx] = examData; showNotify("Đã cập nhật đề thi!"); } 
-                else { exams.value.push(examData); showNotify("Đã giao bài thành công! Mã Code: " + examData.examCode); }
-                view.value = 'teacher-dash'; teacherTab.value = 'exams';
-            } else showNotify("Lỗi lưu đề: " + error.message, "error");
-        };
+    // Khai báo biến 1 lần duy nhất
+    let error;
+    let insertedData = null;
+
+    if (isEditing) {
+        error = (await supabaseClient.from('exams').update(examData).eq('id', newExam.value.id)).error;
+    } else {
+        // Không tự gán examData.id nữa, thêm .select() để lấy ID do Supabase cấp
+        const response = await supabaseClient.from('exams').insert([examData]).select();
+        error = response.error;
+        if (response.data) insertedData = response.data[0];
+    }
+
+    if (!error) {
+        if (isEditing) { 
+            const idx = exams.value.findIndex(e => e.id === examData.id); 
+            if (idx !== -1) exams.value[idx] = examData; 
+            showNotify("Đã cập nhật đề thi!"); 
+        } else { 
+            // Đẩy đề thi đã có ID của Supabase vào mảng cục bộ
+            exams.value.push(insertedData); 
+            showNotify("Đã giao bài thành công! Mã Code: " + examData.examCode); 
+        }
+        view.value = 'teacher-dash'; teacherTab.value = 'exams';
+    } else {
+        showNotify("Lỗi lưu đề: " + error.message, "error");
+    }
+};
 
         const deleteExam = async (id) => {
             if(confirm("Bạn có chắc chắn muốn xóa vĩnh viễn đề thi này không?")) {
@@ -1832,8 +1898,8 @@ const submitExam = async (isManual = false) => {
 
             userScore = Math.round(userScore * 100) / 100;
 
+            // XÓA TRƯỜNG id: Date.now() Ở ĐÂY
             resData = { 
-                id: Date.now(), 
                 examId: currentExam.value.id, 
                 studentName: displayIdentity, 
                 submittedAt: new Date().toLocaleString('vi-VN'), 
@@ -1849,8 +1915,8 @@ const submitExam = async (isManual = false) => {
         } 
         // 6. XỬ LÝ CHẤM ĐIỂM (Dành cho đề Tự luận nộp File)
         else {
+            // XÓA TRƯỜNG id: Date.now() Ở ĐÂY NỮA
             resData = { 
-                id: Date.now(), 
                 examId: currentExam.value.id, 
                 studentName: displayIdentity, 
                 submittedAt: new Date().toLocaleString('vi-VN'), 
@@ -1863,19 +1929,24 @@ const submitExam = async (isManual = false) => {
             };
         }
 
-        // 7. Lưu vào Supabase
-        const { error } = await supabaseClient.from('results').insert([resData]);
+        // 7. Lưu vào Supabase và LẤY ID CHUẨN VỀ (Bằng cách thêm .select())
+        const { data: insertedData, error } = await supabaseClient.from('results').insert([resData]).select();
+        
         if (error) throw error;
 
-        // Cập nhật giao diện giáo viên/học sinh
-        allResults.value.unshift(resData); 
+        // Cập nhật giao diện bằng dữ liệu đã có ID chuẩn từ Database
+        if (insertedData && insertedData.length > 0) {
+            resData = insertedData[0]; // Gán lại resData để lấy ID chuẩn cho việc chấm AI bên dưới
+            allResults.value.unshift(insertedData[0]); 
+        }
+
         showNotify(cheatWarnings.value >= 3 ? "Tự động thu bài do vi phạm!" : "Nộp bài thành công!");
         
         // 8. Dọn dẹp an toàn: Xóa CẢ 2 bản nháp local
         localStorage.removeItem(`eduexam_backup_${currentExam.value.id}`);
         localStorage.removeItem(`eduexam_backup_exam_${currentExam.value.id}`);
         
-        // 9. Chạy chấm bài nền bằng AI nếu có tự luận
+        // 9. Chạy chấm bài nền bằng AI nếu có tự luận (Lúc này resData đã có ID chuẩn từ DB)
         if (currentExam.value.type === 'quiz' && resData.status === 'pending') {
             backgroundAIGrading(resData, currentExam.value); 
         }
@@ -2270,26 +2341,32 @@ const openAddModal = () => {
     showAddModal.value = true; 
 };
 
-// 3. Hàm lưu người dùng (Đã sửa để lấy đúng role từ form)
 const saveNewUser = async () => {
     if (!newUserData.value.name.trim() || !newUserData.value.password.trim()) {
         return showNotify("Nhập đầy đủ thông tin", "error");
     }
     
-    const newUser = { 
-        id: Date.now(), 
-        name: newUserData.value.name,
-        password: newUserData.value.password,
-        role: newUserData.value.role // Lấy role từ form đã chọn
-    };
+    // BỔ SUNG: Chặn ngay từ Frontend nếu tên đã tồn tại
+    if (users.value.find(u => u.name.toLowerCase() === newUserData.value.name.toLowerCase())) {
+        return showNotify("Tên tài khoản này đã tồn tại trong hệ thống!", "error");
+    }
 
-    const { error } = await supabaseClient.from('users').insert([newUser]);
-    if (!error) { 
-        users.value.push(newUser); 
+    const newUser = { name: newUserData.value.name, password: newUserData.value.password, role: newUserData.value.role };
+
+    // Thêm .select() để lấy lại dữ liệu mới nhất
+    const { data, error } = await supabaseClient.from('users').insert([newUser]).select();
+    
+    if (!error && data) { 
+        users.value.unshift(data[0]); // Đẩy lên đầu danh sách UI
         showAddModal.value = false; 
         showNotify(`Đã tạo tài khoản ${newUser.role} thành công!`); 
     } else {
-        showNotify("Lỗi: " + error.message, "error");
+        // Bắt lỗi Database nếu lọt qua Frontend
+        if (error.code === '23505' || error.message.includes('unique constraint')) {
+            showNotify("Tên tài khoản này đã có người sử dụng!", "error");
+        } else {
+            showNotify("Lỗi: " + error.message, "error");
+        }
     }
 };
 const exportToExcel = () => {
@@ -2597,6 +2674,10 @@ const handleAutoAttachImages = async (event) => {
     }, 500);
 };
 return {
+    searchArchiveQuery,
+currentArchivePage,
+totalArchivePages,
+paginatedArchivedExams,
     showDetailedAnswers,
     publicExams,         // <--- THÊM DÒNG NÀY (Để UI thấy được danh sách Chợ đề thi)
     cloneExam,
